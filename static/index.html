@@ -601,9 +601,13 @@
                         <div class="homeip-terminal rounded-[1.25rem] overflow-hidden">
                             <div class="px-5 py-3 bg-slate-800/80 border-b border-slate-700/70 flex items-center gap-2">
                                 <span class="w-3 h-3 rounded-full bg-rose-500"></span><span class="w-3 h-3 rounded-full bg-amber-500"></span><span class="w-3 h-3 rounded-full bg-emerald-500"></span>
-                                <span class="ml-3 text-sm font-black homeip-muted">VPS 纳管命令 (Root)</span>
+                                <span class="ml-3 text-sm font-black homeip-muted">住宅IP命令部署模块 (Root)</span>
                             </div>
-                            <div class="p-5 text-emerald-400 font-mono text-sm md:text-base break-all">住宅代理已合并到服务器 Full Deploy Command，无需二次安装。</div>
+                            <div class="p-5 space-y-3">
+                                <div class="text-xs font-black homeip-muted">独立安装家宽代理服务，不与前面的服务器监控命令混用。</div>
+                                <div class="text-emerald-400 font-mono text-xs md:text-sm break-all cursor-pointer hover:text-emerald-300 transition-colors" @click="copyCommand(generateHomeIpCmd(), '住宅IP部署命令已复制')">{{ generateHomeIpCmd() }}</div>
+                                <button @click="copyCommand(generateHomeIpCmd(), '住宅IP部署命令已复制')" class="homeip-chip active px-4 py-2 rounded-lg text-xs font-black">复制 Root 命令</button>
+                            </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="homeip-panel rounded-xl p-4 flex justify-between gap-3"><span class="homeip-muted font-black">控制权限</span><span class="text-indigo-200 font-black">仅管理员</span></div>
@@ -624,6 +628,16 @@
                                 </select>
                                 <button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="bg-gradient-to-r from-blue-600 to-violet-600 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg whitespace-nowrap">复制部署命令</button>
                             </div>
+                        </div>
+                        <div class="homeip-panel rounded-xl p-4">
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                                <div><h3 class="text-lg font-black text-white">订阅链接生成</h3><p class="homeip-muted text-xs font-bold mt-1">生成带鉴权 token 的 SOCKS5 节点订阅，客户端无需登录后台。</p></div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-black">复制订阅</button>
+                                    <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">重新生成</button>
+                                </div>
+                            </div>
+                            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-indigo-200 font-mono text-xs break-all">{{ homeIpSubscriptionUrl }}</div>
                         </div>
                     </div>
                 </div>
@@ -680,17 +694,6 @@
                             <div class="homeip-panel rounded-2xl p-5"><h4 class="homeip-muted font-black mb-4 pb-3 border-b border-slate-700">风险深度检测</h4><div class="space-y-3 text-sm font-black"><div class="flex justify-between"><span class="homeip-muted">Spamhaus 情报</span><span class="homeip-accent">✅ 纯净无异常</span></div><div class="flex justify-between"><span class="homeip-muted">代理/机房特征</span><span class="homeip-accent">未检测到明显异常</span></div><div class="flex justify-between"><span class="homeip-muted">数据源</span><span>全球 RIR 联合测绘引擎</span></div></div></div>
                         </div>
                     </div>
-                </div>
-
-                <div class="homeip-panel rounded-[1.5rem] p-6">
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
-                        <div><h3 class="text-xl font-black text-white">订阅链接生成</h3><p class="homeip-muted text-sm font-bold mt-1">生成带鉴权 token 的 SOCKS5 节点订阅，客户端无需登录后台。</p></div>
-                        <div class="flex flex-wrap gap-2">
-                            <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-black">复制订阅链接</button>
-                            <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-5 py-2.5 rounded-xl text-xs font-black">重新生成</button>
-                        </div>
-                    </div>
-                    <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-indigo-200 font-mono text-xs break-all">{{ homeIpSubscriptionUrl }}</div>
                 </div>
 
                 <div class="homeip-terminal rounded-[1.5rem] overflow-hidden">
@@ -1487,7 +1490,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     if (!ip) return '请先选择一台已接入的服务器';
                     if (!token) return '请先刷新页面以签发该服务器的 Agent Token';
                     const scriptUrl = `${currentDomain}/api/agent_update?ip=${encodeURIComponent(ip)}&component=proxy-installer`;
-                    return `bash <(curl -fsSL -H "Authorization: ${token}" "${scriptUrl}") --domain "${currentDomain}" --controller "${currentDomain}" --ip "${ip}" --token "${token}"`;
+                    return `if command -v apt-get >/dev/null 2>&1; then apt-get update -y && apt-get install -y bash curl; elif command -v apk >/dev/null 2>&1; then apk update && apk add --no-cache bash curl; elif command -v yum >/dev/null 2>&1; then yum install -y bash curl; elif command -v dnf >/dev/null 2>&1; then dnf install -y bash curl; fi; curl -fsSL -H "Authorization: ${token}" "${scriptUrl}" -o /tmp/myvps-residential-proxy.sh && bash /tmp/myvps-residential-proxy.sh --domain "${currentDomain}" --controller "${currentDomain}" --ip "${ip}" --token "${token}"`;
                 };
                 const loadHomeIp = async () => {
                     try {
