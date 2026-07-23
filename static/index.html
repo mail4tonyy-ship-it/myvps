@@ -1499,10 +1499,12 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const saveHomeIpConfig = async () => {
                     const country = String(homeIpCountry.value || 'JP').trim().toUpperCase().slice(0, 2);
                     const port = Math.min(65535, Math.max(1, Number(homeIpPort.value) || 7920));
-                    await fetchApi('/api/homeip/config', { method: 'POST', body: JSON.stringify({ country, "0": country, port, enabled: true }) });
+                    const res = await fetchApi('/api/homeip/config', { method: 'POST', body: JSON.stringify({ country, "0": country, port, enabled: true }) });
+                    const data = await res.json().catch(() => ({}));
                     homeIpCountry.value = country;
                     homeIpPort.value = port;
-                    alert('✅ 家宽全局配置已保存。已部署节点会在下一次拉取配置时生效。');
+                    homeIpProxyReady.value = data.proxy_ready === true || homeIpProxyReady.value;
+                    alert(data.proxy_ready === false ? '✅ 家宽策略已保存。订阅和代理鉴权还需要在 Cloudflare 环境变量中配置 PROXY_USER / PROXY_PASS。' : '✅ 家宽全局配置已保存。已部署节点会在下一次拉取配置时生效。');
                     loadHomeIp();
                 };
                 const switchHomeIp = async (ip) => {
