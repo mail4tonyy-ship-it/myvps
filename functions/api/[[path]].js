@@ -708,21 +708,22 @@ export async function onRequest(context) {
         
         let fastMode = false; try { const uiActive = await db.prepare("SELECT ts FROM sys_config WHERE key = 'ui_active'").first(); if (uiActive && (nowMs - uiActive.ts < 90000)) fastMode = true; } catch(e) {}
         
-        let reportInterval = 5; let pingCt = 'default'; let pingCu = 'default'; let pingCm = 'default';
+        let reportInterval = 5; let pingCt = 'default'; let pingCu = 'default'; let pingCm = 'default'; let pingBd = 'default';
         try { 
-            const { results } = await db.prepare("SELECT key, value FROM probe_settings WHERE key IN ('report_interval', 'ping_node_ct', 'ping_node_cu', 'ping_node_cm')").all(); 
+            const { results } = await db.prepare("SELECT key, value FROM probe_settings WHERE key IN ('report_interval', 'ping_node_ct', 'ping_node_cu', 'ping_node_cm', 'ping_node_bd')").all(); 
             if (results) {
                 results.forEach(r => {
                     if (r.key === 'report_interval') reportInterval = parseInt(r.value) || 5;
                     if (r.key === 'ping_node_ct') pingCt = r.value;
                     if (r.key === 'ping_node_cu') pingCu = r.value;
                     if (r.key === 'ping_node_cm') pingCm = r.value;
+                    if (r.key === 'ping_node_bd') pingBd = r.value;
                 });
             }
         } catch(e) {}
         
         const effectiveInterval = Math.min(300, fastMode ? Math.max(15, reportInterval) : Math.max(90, reportInterval));
-        return Response.json({ success: true, fast_mode: fastMode, interval: effectiveInterval, ping_ct: pingCt, ping_cu: pingCu, ping_cm: pingCm });
+        return Response.json({ success: true, fast_mode: fastMode, interval: effectiveInterval, ping_ct: pingCt, ping_cu: pingCu, ping_cm: pingCm, ping_bd: pingBd });
      } catch (err) {
         return Response.json({ error: "REPORT_ERR: " + (err && err.message ? err.message : String(err)) }, { status: 500 });
      }

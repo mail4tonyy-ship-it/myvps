@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import json
+import hashlib
+import hmac
 import os
 import platform
+import py_compile
 import socket
 import subprocess
 import sys
@@ -32,6 +35,7 @@ if sys.stdout.encoding != "UTF-8":
         pass
 
 CONF_FILE = "/opt/myvps/config.json"
+AGENT_DIR = "/opt/myvps"
 
 try:
     with open(CONF_FILE, "r", encoding="utf-8") as config_file:
@@ -42,6 +46,7 @@ except Exception:
 
 API_URL = env["api_url"].rstrip("/")
 REPORT_URL = env["report_url"].rstrip("/")
+BASE_URL = ""
 VPS_IP = env["ip"]
 TOKEN = env["token"]
 REALTIME_URL = env.get("realtime_url", "")
@@ -54,8 +59,10 @@ prev_cpu_idle = 0
 prev_rx = 0
 prev_tx = 0
 realtime_status_interval = 30
+last_self_update = 0
 heartbeat_wakeup = threading.Event()
 config_wakeup = threading.Event()
+SELF_UPDATE_INTERVAL = 21600
 
 def require_https_url(value, name):
     parsed = urllib.parse.urlsplit(value or "")
@@ -65,6 +72,8 @@ def require_https_url(value, name):
 
 API_URL = require_https_url(API_URL, "api_url")
 REPORT_URL = require_https_url(REPORT_URL, "report_url")
+base_parts = urllib.parse.urlsplit(API_URL)
+BASE_URL = f"{base_parts.scheme}://{base_parts.netloc}"
 if REALTIME_URL:
     REALTIME_URL = require_https_url(REALTIME_URL, "realtime_url")
 
@@ -93,6 +102,72 @@ def request_json(url, method="GET", payload=None, timeout=20):
         if not raw:
             return {}
         return json.loads(raw.decode("utf-8"))
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def verify_component_manifest(component, file_path, headers):
+    expected_sha = (headers.get("X-Agent-SHA256") or "").strip().lower()
+    version = (headers.get("X-Agent-Manifest-Version") or "").strip()
+    expected_length = (headers.get("X-Agent-Length") or "").strip()
+    supplied_mac = (headers.get("X-Agent-MAC") or "").strip().lower()
+    actual_length = str(os.path.getsize(file_path))
+    actual_sha = file_sha256(file_path)
+    manifest = f"v1\n{component}\n{expected_sha}\n{actual_length}\n"
+    expected_mac = hmac.new(TOKEN.encode("utf-8"), manifest.encode("utf-8"), hashlib.sha256).hexdigest()
+    return (
+        version == "1"
+        and expected_length == actual_length
+        and expected_sha == actual_sha
+        and supplied_mac
+        and hmac.compare_digest(supplied_mac, expected_mac)
+    )
+
+def download_component(component, target_path):
+    url = f"{BASE_URL}/api/agent_update?ip={urllib.parse.quote(VPS_IP)}&component={urllib.parse.quote(component)}"
+    request = urllib.request.Request(url, headers={**HEADERS, "User-Agent": "MyVps-Agent-Updater/1.0"})
+    temp_path = target_path + ".download"
+    with urllib.request.urlopen(request, timeout=45) as response:
+        with open(temp_path, "wb") as handle:
+            handle.write(response.read())
+        headers = response.headers
+    if not verify_component_manifest(component, temp_path, headers):
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+        raise RuntimeError(f"{component} manifest verification failed")
+    py_compile.compile(temp_path, doraise=True)
+    current_sha = file_sha256(target_path) if os.path.exists(target_path) else ""
+    new_sha = file_sha256(temp_path)
+    if current_sha == new_sha:
+        os.remove(temp_path)
+        return False
+    os.chmod(temp_path, 0o700)
+    os.replace(temp_path, target_path)
+    return True
+
+def maybe_self_update(force=False):
+    global last_self_update
+    now = time.time()
+    if not force and now - last_self_update < SELF_UPDATE_INTERVAL:
+        return False
+    last_self_update = now
+    changed = False
+    try:
+        changed = download_component("realtime-client", os.path.join(AGENT_DIR, "realtime_client.py")) or changed
+        changed = download_component("agent", os.path.join(AGENT_DIR, "agent.py")) or changed
+    except Exception as error:
+        print(f"[agent] self update skipped: {error}", flush=True)
+        return False
+    if changed:
+        print("[agent] updated components, restarting process", flush=True)
+        os.execv(sys.executable, [sys.executable, os.path.join(AGENT_DIR, "agent.py")])
+    return changed
 
 def read_first_line(path, default=""):
     try:
@@ -194,8 +269,15 @@ def count_connections():
             pass
     return tcp, udp
 
+DEFAULT_PING_HOSTS = {
+    "ct": "180.76.76.76",
+    "cu": "119.29.29.29",
+    "cm": "223.5.5.5",
+    "bd": "www.bytedance.com",
+}
+
 def ping_ms(host):
-    if not host or host == "default":
+    if not host:
         return 0
     try:
         output = subprocess.run(["ping", "-c", "1", "-W", "2", host], capture_output=True, text=True, timeout=4).stdout
@@ -205,6 +287,12 @@ def ping_ms(host):
     except Exception:
         pass
     return 0
+
+def policy_ping_host(policy, key):
+    host = (policy or {}).get(f"ping_{key}")
+    if not host or host == "default":
+        return DEFAULT_PING_HOSTS[key]
+    return host
 
 def uptime_text():
     try:
@@ -246,10 +334,10 @@ def collect_status(policy=None):
         "cpu_info": cpu_name[:160],
         "boot_time": boot_time,
         "processes": len(os.listdir("/proc")) if os.path.isdir("/proc") else 0,
-        "ping_ct": ping_ms((policy or {}).get("ping_ct")),
-        "ping_cu": ping_ms((policy or {}).get("ping_cu")),
-        "ping_cm": ping_ms((policy or {}).get("ping_cm")),
-        "ping_bd": 0,
+        "ping_ct": ping_ms(policy_ping_host(policy, "ct")),
+        "ping_cu": ping_ms(policy_ping_host(policy, "cu")),
+        "ping_cm": ping_ms(policy_ping_host(policy, "cm")),
+        "ping_bd": ping_ms(policy_ping_host(policy, "bd")),
         **mem,
         **disk,
     }
@@ -292,12 +380,14 @@ def on_realtime_message(message):
 
 if __name__ == "__main__":
     policy = fetch_policy()
+    maybe_self_update(force=True)
     realtime_channel = RealtimeChannel(REALTIME_URL, VPS_IP, TOKEN, "core", on_realtime_message)
     realtime_channel.start()
 
     while True:
         started = time.monotonic()
         try:
+            maybe_self_update()
             websocket_online = bool(realtime_channel and realtime_channel.connected)
             fallback_ready = not realtime_channel or not realtime_channel.enabled or time.time() - (realtime_channel.last_disconnected or realtime_channel.started_at) >= 30
             report_status(policy, force_http=not websocket_online, allow_http=websocket_online or fallback_ready)

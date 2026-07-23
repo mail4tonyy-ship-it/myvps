@@ -162,6 +162,40 @@
         .pc-body::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
         .pc-body input[type=number]::-webkit-inner-spin-button,
         .pc-body input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .myvps-admin-shell { max-width: 1180px; }
+        .myvps-topbar {
+            min-height: 74px;
+            background: linear-gradient(135deg, rgba(255,255,255,.9), rgba(248,250,252,.72));
+            box-shadow: 0 18px 45px rgba(15,23,42,.08);
+        }
+        .myvps-brand-mark {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(79,70,229,.22);
+        }
+        .myvps-action-pill {
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .myvps-tabs-wrap {
+            background: rgba(226,232,240,.42);
+            border: 1px solid rgba(255,255,255,.78);
+            box-shadow: inset 0 1px 3px rgba(15,23,42,.08), 0 12px 32px rgba(15,23,42,.06);
+        }
+        .myvps-admin-tab {
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         .myvps-tab-strip { -ms-overflow-style: none; scrollbar-width: none; scroll-snap-type: x proximity; }
         .myvps-tab-strip::-webkit-scrollbar { display: none; }
         .myvps-tab-button { scroll-snap-align: start; }
@@ -184,13 +218,16 @@
         .myvps-settings-table-scroll th,
         .myvps-settings-table-scroll td { white-space: normal; }
         @media (max-width: 640px) {
+            .myvps-topbar { min-height: auto; border-radius: 1.5rem !important; }
+            .myvps-brand-mark { width: 36px; height: 36px; border-radius: 12px; }
+            .myvps-admin-tab { min-height: 42px; }
             .myvps-settings-page { overflow-x: hidden; }
             .myvps-settings-page .myvps-settings-card { border-radius: 1.25rem !important; padding: 1rem !important; }
             .myvps-settings-table-scroll { margin-left: -1rem; margin-right: -1rem; padding: 0 1rem; }
         }
         @media (min-width: 1024px) {
             .myvps-tab-strip { overflow-x: visible !important; }
-            .myvps-admin-tab { flex: 1 1 0; min-width: 0; padding-left: .5rem !important; padding-right: .5rem !important; font-size: .75rem !important; }
+            .myvps-admin-tab { flex: 1 1 0; min-width: 0; padding-left: .5rem !important; padding-right: .5rem !important; }
         }
     </style>
 </head>
@@ -388,32 +425,35 @@
             </div>
         </div>
 
-        <div v-if="isLoggedIn && activeTab !== 'probe'" class="w-full max-w-6xl min-w-0 mx-auto space-y-8 animate-fade-in p-4 md:p-8 overflow-x-hidden">
+        <div v-if="isLoggedIn && activeTab !== 'probe'" class="myvps-admin-shell w-full min-w-0 mx-auto space-y-6 animate-fade-in p-4 md:p-6 overflow-x-hidden">
             
-            <div class="bg-white/70 backdrop-blur-xl border border-white/80 p-4 md:px-6 rounded-[2rem] shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row justify-between items-center sticky top-4 z-50 gap-4">
-                <div class="flex flex-wrap justify-center lg:justify-start items-center gap-3 md:gap-4 w-full lg:w-auto">
-                    <h1 class="text-xl md:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 shrink-0">
-                        {{ siteTitle || 'MyVps' }}
-                    </h1>
-                    <div class="hidden md:block w-px h-6 bg-slate-300"></div>
+            <div class="myvps-topbar backdrop-blur-xl border border-white/80 p-4 md:px-5 rounded-[1.75rem] flex flex-col lg:flex-row justify-between items-center sticky top-4 z-50 gap-4">
+                <div class="flex items-center gap-3 w-full lg:w-auto min-w-0">
+                    <div class="myvps-brand-mark shrink-0">⚡</div>
+                    <div class="min-w-0">
+                        <h1 class="text-xl md:text-2xl font-black leading-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 truncate">
+                            {{ siteTitle || 'MyVps' }}
+                        </h1>
+                        <div class="text-[10px] md:text-xs font-bold text-slate-400 tracking-[0.18em] uppercase">Server Monitor</div>
                     </div>
+                </div>
                 <div class="flex flex-wrap justify-center lg:justify-end items-center gap-2 w-full lg:w-auto">
-                    <span class="text-[10px] md:text-xs font-bold text-emerald-500 bg-emerald-100/50 px-3 py-2 rounded-full border border-emerald-200 animate-pulse">🟢 实时监控中</span>
-                    <button @click="refreshData" class="bg-white/50 hover:bg-white/80 border border-slate-200 px-4 py-2 rounded-full text-xs font-medium transition-all shadow-sm">🔄 刷新</button>
-                    <button @click="logout" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-full text-xs font-bold transition-all border border-transparent hover:border-rose-200">退出</button>
+                    <span class="myvps-action-pill text-[10px] md:text-xs font-bold text-emerald-600 bg-emerald-50 px-3.5 rounded-full border border-emerald-200 shadow-sm">● 实时监控中</span>
+                    <button @click="refreshData" class="myvps-action-pill bg-white/80 hover:bg-white border border-slate-200 px-4 rounded-full text-xs font-bold text-slate-700 transition-all shadow-sm">刷新</button>
+                    <button @click="logout" class="myvps-action-pill text-rose-500 hover:bg-rose-50 px-4 rounded-full text-xs font-bold transition-all border border-transparent hover:border-rose-200">退出</button>
                 </div>
             </div>
 
-            <div class="flex justify-center mb-4 px-2">
-                <div class="myvps-tab-strip w-full max-w-full overflow-x-auto bg-slate-200/50 p-1.5 rounded-full flex flex-nowrap justify-start lg:justify-center gap-1 backdrop-blur-sm border border-white/50 shadow-inner">
+            <div class="flex justify-center px-1">
+                <div class="myvps-tab-strip myvps-tabs-wrap w-full max-w-full overflow-x-auto p-1.5 rounded-[1.6rem] flex flex-nowrap justify-start lg:justify-center gap-1.5 backdrop-blur-sm">
                     <template v-if="role === 'admin'">
-                        <button @click="activeTab = 'nodes'" :class="activeTab === 'nodes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">服务器监控</button>
-                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">⚙️ 系统设置</button>
-                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm text-emerald-600 hover:bg-emerald-50 shadow-sm border border-transparent hover:border-emerald-200">🌐 探针全景大盘</button>
+                        <button @click="activeTab = 'nodes'" :class="activeTab === 'nodes' ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 sm:px-5 rounded-[1.25rem] font-black transition-all text-[12px] sm:text-sm">服务器监控</button>
+                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 sm:px-5 rounded-[1.25rem] font-black transition-all text-[12px] sm:text-sm">⚙️ 系统设置</button>
+                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 sm:px-5 rounded-[1.25rem] font-black transition-all text-[12px] sm:text-sm text-emerald-600 hover:bg-white/70">🌐 探针全景大盘</button>
                     </template>
                     <template v-if="role === 'user'">
-                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-6 md:px-8 py-2.5 rounded-full font-bold transition-all text-sm md:text-base">⚙️ 系统设置</button>
-                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="px-6 md:px-8 py-2.5 rounded-full font-bold transition-all text-sm md:text-base text-blue-600 hover:bg-blue-50 shadow-sm border border-transparent hover:border-blue-200">🌐 探针全景大盘</button>
+                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100/60' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-admin-tab px-6 md:px-8 rounded-[1.25rem] font-black transition-all text-sm">⚙️ 系统设置</button>
+                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="myvps-admin-tab px-6 md:px-8 rounded-[1.25rem] font-black transition-all text-sm text-blue-600 hover:bg-white/70">🌐 探针全景大盘</button>
                     </template>
                 </div>
             </div>
@@ -456,19 +496,15 @@
                             <div class="bg-white/40 p-4 rounded-2xl border border-white"><div class="text-[10px] text-slate-400 font-bold tracking-wider mb-2">7-DAY TRAFFIC TREND</div><div :id="'chart-' + vps.ip" class="w-full h-32"></div></div>
                         </div>
 
-                        <div class="px-6 md:px-8 pb-4">
-                            <div class="bg-emerald-50/70 border-2 border-dashed border-emerald-200 p-6 rounded-[1.5rem] mb-4 relative overflow-hidden group shadow-sm hover:border-emerald-300 transition-all">
-                                <div class="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl shadow-sm">MONITOR AGENT</div>
-                                <h4 class="font-black text-emerald-800 text-lg mb-2 flex items-center gap-2">部署监控 Agent</h4>
-                                <p class="text-xs text-emerald-600/80 font-bold leading-relaxed">复制下方命令到目标 VPS 执行，仅安装服务器监控、探针上报与实时状态客户端。</p>
+                        <div class="p-4 md:px-6 md:py-4 bg-slate-100/50 border-t border-white flex flex-col gap-3">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-slate-500">
+                                <div class="font-bold text-slate-600">部署监控 Agent</div>
+                                <div class="text-[11px] text-slate-400">复制命令到目标 VPS 执行，仅安装监控与探针上报客户端。</div>
                             </div>
-                        </div>
-
-                        <div class="p-4 md:p-6 bg-slate-100/50 border-t border-white flex flex-col gap-3">
-                            <div class="bg-slate-800 p-4 rounded-[1.25rem] group shadow-inner transition-colors">
-                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2 flex justify-between items-center">
-                                    <span>Full Deploy Command · MyVps Monitor Agent</span>
-                                    <div class="flex gap-2 text-[9px]">
+                            <div class="bg-slate-800 p-3.5 rounded-[1.1rem] group shadow-inner transition-colors">
+                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                                    <span>MyVps Monitor Agent</span>
+                                    <div class="flex flex-wrap gap-2 text-[9px] normal-case">
                                         <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="debian" class="accent-indigo-500"> Ubuntu/Debian</label>
                                         <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="alpine" class="accent-indigo-500"> Alpine</label>
                                     </div>
@@ -1174,12 +1210,12 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                         const server = servers.value.find(item => normalizeRealtimeKey(item.ip) === key);
                         if (server && timestamp >= Number(server._realtime_ts || server.last_report || 0)) {
                             const core = snapshot.core;
-                            Object.assign(server, { cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_report: timestamp, realtime_state: snapshot.core_state, boot_id: snapshot.boot_id?.core, sequence: snapshot.sequence?.core, config_result: snapshot.core_config_result, config_result_at: snapshot.core_config_result_at, _realtime_ts: timestamp });
+                            Object.assign(server, { cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, last_report: timestamp, realtime_state: snapshot.core_state, boot_id: snapshot.boot_id?.core, sequence: snapshot.sequence?.core, config_result: snapshot.core_config_result, config_result_at: snapshot.core_config_result_at, _realtime_ts: timestamp });
                         }
                         const core = snapshot.core;
                         const probe = publicProbeServers.value.find(item => normalizeRealtimeKey(item.id) === key);
-                        if (probe && timestamp >= Number(probe._realtime_ts || probe.last_updated || 0)) Object.assign(probe, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp });
-                        if (normalizeRealtimeKey(probeDetail.value?.id) === key && timestamp >= Number(probeDetail.value?._realtime_ts || probeDetail.value?.last_updated || 0)) { Object.assign(probeDetail.value, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp }); updateProbeDetailCharts(probeDetail.value); }
+                        if (probe && timestamp >= Number(probe._realtime_ts || probe.last_updated || 0)) Object.assign(probe, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp });
+                        if (normalizeRealtimeKey(probeDetail.value?.id) === key && timestamp >= Number(probeDetail.value?._realtime_ts || probeDetail.value?.last_updated || 0)) { Object.assign(probeDetail.value, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp }); updateProbeDetailCharts(probeDetail.value); }
                     }
                     
                 };

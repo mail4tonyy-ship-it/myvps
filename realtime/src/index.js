@@ -73,6 +73,7 @@ function sanitizeSnapshot(snapshot) {
       cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime,
       net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed,
       tcp_conn: core.tcp_conn, udp_conn: core.udp_conn,
+      ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd,
     },
     core_last_seen: snapshot.core_last_seen || 0,
     core_state: snapshot.core_state || "offline",
@@ -82,7 +83,7 @@ function sanitizeSnapshot(snapshot) {
 
 function compactRoleState(role, data) {
   if (role === "core") {
-    const keys = ["cpu", "mem", "disk", "load", "uptime", "net_in_speed", "net_out_speed", "tcp_conn", "udp_conn", "os", "arch"];
+    const keys = ["cpu", "mem", "disk", "load", "uptime", "net_in_speed", "net_out_speed", "tcp_conn", "udp_conn", "ping_ct", "ping_cu", "ping_cm", "ping_bd", "os", "arch"];
     return Object.fromEntries(keys.filter(key => data?.[key] !== undefined).map(key => [key, data[key]]));
   }
   return {
