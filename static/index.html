@@ -165,6 +165,28 @@
         .myvps-tab-strip { -ms-overflow-style: none; scrollbar-width: none; scroll-snap-type: x proximity; }
         .myvps-tab-strip::-webkit-scrollbar { display: none; }
         .myvps-tab-button { scroll-snap-align: start; }
+        .myvps-settings-page,
+        .myvps-settings-page * { box-sizing: border-box; min-width: 0; }
+        .myvps-settings-page { width: 100%; max-width: 100%; overflow-x: clip; }
+        .myvps-settings-page input,
+        .myvps-settings-page select,
+        .myvps-settings-page textarea,
+        .myvps-settings-page button { max-width: 100%; }
+        .myvps-settings-page label,
+        .myvps-settings-page p,
+        .myvps-settings-page h3,
+        .myvps-settings-page span,
+        .myvps-settings-page td,
+        .myvps-settings-page th { overflow-wrap: anywhere; word-break: break-word; }
+        .myvps-settings-table-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .myvps-settings-table-scroll table { min-width: 640px; table-layout: fixed; }
+        .myvps-settings-table-scroll th,
+        .myvps-settings-table-scroll td { white-space: normal; }
+        @media (max-width: 640px) {
+            .myvps-settings-page { overflow-x: hidden; }
+            .myvps-settings-page .myvps-settings-card { border-radius: 1.25rem !important; padding: 1rem !important; }
+            .myvps-settings-table-scroll { margin-left: -1rem; margin-right: -1rem; padding: 0 1rem; }
+        }
         @media (min-width: 1024px) {
             .myvps-tab-strip { overflow-x: visible !important; }
             .myvps-admin-tab { flex: 1 1 0; min-width: 0; padding-left: .5rem !important; padding-right: .5rem !important; font-size: .75rem !important; }
@@ -365,7 +387,7 @@
             </div>
         </div>
 
-        <div v-if="isLoggedIn && activeTab !== 'probe'" class="max-w-6xl mx-auto space-y-8 animate-fade-in p-4 md:p-8">
+        <div v-if="isLoggedIn && activeTab !== 'probe'" class="w-full max-w-6xl min-w-0 mx-auto space-y-8 animate-fade-in p-4 md:p-8 overflow-x-hidden">
             
             <div class="bg-white/70 backdrop-blur-xl border border-white/80 p-4 md:px-6 rounded-[2rem] shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row justify-between items-center sticky top-4 z-50 gap-4">
                 <div class="flex flex-wrap justify-center lg:justify-start items-center gap-3 md:gap-4 w-full lg:w-auto">
@@ -457,17 +479,17 @@
                     </div>
                 </div>
             </div>
-            <div v-if="activeTab === 'settings'" class="space-y-6 max-w-full overflow-hidden">
+            <div v-if="activeTab === 'settings'" class="myvps-settings-page space-y-6 max-w-full overflow-hidden">
                 <template v-if="role === 'admin'">
-                    <div class="bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
                         <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">⚙️ MyVps 系统参数</h3>
                         <div class="max-w-md">
                             <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">控制面板全局名称</label>
-                            <div class="flex flex-col sm:flex-row gap-3"><input v-model="siteTitleInput" placeholder="Cluster Gateway" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="saveSiteTitle" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md whitespace-nowrap">保存更改</button></div>
+                            <div class="flex flex-col sm:flex-row gap-3"><input v-model="siteTitleInput" placeholder="Cluster Gateway" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="saveSiteTitle" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md">保存更改</button></div>
                         </div>
                     </div>
 
-                    <div class="bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
                         <h3 class="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">⚡ Realtime 状态频率策略</h3>
                         <p class="text-xs text-slate-500 mb-5 font-medium">全局影响所有 VPS 的监控 Agent。上线、掉线和状态变化仍会立即推送。</p>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -478,10 +500,10 @@
                         <p class="mt-4 text-[10px] font-medium text-amber-600">要求：公开探针频率不得快于管理员后台；空闲频率不得快于公开探针。修改后点击下方“立即生效配置”。</p>
                     </div>
 
-                    <div class="bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
                         <h3 class="text-xl font-black text-slate-800 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div class="flex items-center gap-2 min-w-0">📊 探针大盘外观与设置</div>
-                            <button @click="pullGithubNodes" class="self-start sm:self-auto text-xs bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-200 transition-colors shadow-sm whitespace-nowrap">🔄 云端拉取最新主题/测速库</button>
+                            <button @click="pullGithubNodes" class="self-start sm:self-auto text-xs bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-200 transition-colors shadow-sm">🔄 云端拉取最新主题/测速库</button>
                         </h3>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-8">
                             <div class="space-y-4 min-w-0">
@@ -542,11 +564,11 @@
                         <button @click="saveProbeSettings" class="mt-6 bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-md">💾 立即生效配置</button>
                     </div>
 
-                    <div class="bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
                         <h3 class="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">💻 探针服务端管理</h3>
                         <p class="text-sm text-slate-500 mb-6 font-medium">提示：探针大盘已与 MyVps Agent 统一。您在“服务器监控”页面接入的机器会<b>自动</b>出现在此处，在这里只需维护展示信息。</p>
 
-                        <div class="overflow-x-auto bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="myvps-settings-table-scroll bg-white rounded-2xl border border-slate-100 shadow-sm">
                             <table class="w-full text-left border-collapse text-sm">
                                 <thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100"><th class="p-4">服务器名称</th><th class="p-4">分组</th><th class="p-4">状态</th><th class="p-4">操作</th></tr></thead>
                                 <tbody>
@@ -567,11 +589,11 @@
                 </template>
 
                 <template v-if="role === 'user'">
-                    <div class="bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
                         <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">🔑 账号安全</h3>
                         <div class="max-w-md">
                             <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">修改登录密码</label>
-                            <div class="flex flex-col sm:flex-row gap-3"><input v-model="userNewPassword" type="password" placeholder="请输入新密码" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="updateUserPassword" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md whitespace-nowrap">确认修改</button></div>
+                            <div class="flex flex-col sm:flex-row gap-3"><input v-model="userNewPassword" type="password" placeholder="请输入新密码" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="updateUserPassword" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md">确认修改</button></div>
                         </div>
                     </div></template>
             </div>
