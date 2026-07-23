@@ -115,6 +115,24 @@
         .probe-chart-card canvas { max-height: 150px; }
         .probe-chart-full { grid-column: 1 / -1; }
         .probe-chart-full canvas { max-height: 250px !important; }
+        .probe-detail-view { display: flex; flex-direction: column; gap: 20px; }
+        .probe-detail-summary { padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.08); border: 1px solid rgba(226,232,240,.9); }
+        .probe-detail-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; min-width: 0; }
+        .probe-detail-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .probe-detail-status { padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 900; color: #fff; flex: 0 0 auto; }
+        .probe-detail-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 26px 42px; }
+        .probe-detail-grid .probe-info-label { color: #3f3f46; font-size: 14px; line-height: 1.2; }
+        .probe-detail-grid .info-value { margin-top: 6px; color: #2f3136; font-size: 15px; font-weight: 800; line-height: 1.28; overflow-wrap: anywhere; }
+        .probe-detail-grid .probe-info-wide { grid-column: span 2; }
+        .probe-detail-charts { gap: 20px; }
+        .probe-detail-charts .probe-chart-card { min-height: 230px; padding: 20px; border: 1px solid rgba(226,232,240,.9); box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+        .probe-detail-charts .probe-chart-card canvas { height: 165px !important; max-height: 165px; }
+        .probe-detail-charts .probe-chart-full canvas { height: 280px !important; max-height: 280px !important; }
+        .probe-disk-track { height: 22px; margin-top: 48px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+        .probe-disk-fill { height: 100%; border-radius: 999px; background: #34d399; transition: width .3s; }
+        @media (min-width: 980px) { .probe-detail-charts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 900px) { .probe-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } .probe-detail-grid .probe-info-wide { grid-column: span 2; } }
+        @media (max-width: 560px) { .probe-detail-summary { padding: 18px; } .probe-detail-grid { grid-template-columns: 1fr; } .probe-detail-grid .probe-info-wide { grid-column: auto; } .probe-detail-title-row { align-items: flex-start; flex-direction: column; } }
 
         /* 主题支持 */
         .theme2 { background-color: #0d1117; color: #c9d1d9; }
@@ -309,32 +327,32 @@
                     </div>
                 </div>
 
-                <div v-if="probeDetailId">
-                    <div class="probe-header-card header-card">
-                        <div class="flex items-center mb-4">
-                            <h2 class="text-xl sm:text-2xl font-black m-0 mr-3 flex items-center card-title-text">
+                <div v-if="probeDetailId" class="probe-detail-view">
+                    <div class="probe-header-card probe-detail-summary header-card">
+                        <div class="probe-detail-title-row">
+                            <h2 class="probe-detail-title text-xl sm:text-2xl font-black m-0 flex items-center card-title-text">
                                 <img v-if="probeDetail.country && probeDetail.country !== 'XX'" :src="'https://flagcdn.com/24x18/' + probeDetail.country.toLowerCase() + '.png'" class="mr-2 rounded-sm">{{ probeDetail.name }}
                             </h2>
-                            <span class="px-2.5 py-1 rounded-full text-xs font-bold text-white" :style="{background: isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '#10b981' : '#ef4444'}">{{ isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '在线' : '离线' }}</span>
+                            <span class="probe-detail-status" :style="{background: isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '#10b981' : '#ef4444'}">{{ isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '在线' : '离线' }}</span>
                         </div>
-                        <div class="probe-info-grid info-grid">
+                        <div class="probe-info-grid probe-detail-grid info-grid">
                             <div class="flex flex-col"><span class="probe-info-label info-label">运行时间</span><span class="font-medium info-value">{{ probeDetail.uptime || 'N/A' }}</span></div>
                             <div class="flex flex-col"><span class="probe-info-label info-label">架构</span><span class="font-medium info-value">{{ probeDetail.arch || 'N/A' }}</span></div>
-                            <div class="flex flex-col"><span class="probe-info-label info-label">系统</span><span class="font-medium info-value">{{ probeDetail.os || 'N/A' }}</span></div>
+                            <div class="flex flex-col probe-info-wide"><span class="probe-info-label info-label">系统</span><span class="font-medium info-value">{{ probeDetail.os || 'N/A' }}</span></div>
                             <div class="flex flex-col"><span class="probe-info-label info-label">虚拟化</span><span class="font-medium info-value">{{ probeDetail.virt || 'N/A' }}</span></div>
-                            <div class="flex flex-col"><span class="probe-info-label info-label">CPU</span><span class="font-medium truncate info-value" :title="probeDetail.cpu_info">{{ probeDetail.cpu_info || 'N/A' }}</span></div>
+                            <div class="flex flex-col probe-info-wide"><span class="probe-info-label info-label">CPU</span><span class="font-medium truncate info-value" :title="probeDetail.cpu_info">{{ probeDetail.cpu_info || 'N/A' }}</span></div>
                             <div class="flex flex-col"><span class="probe-info-label info-label">Load</span><span class="font-medium info-value">{{ probeDetail.load_avg || '0.00' }}</span></div>
                             <div class="flex flex-col"><span class="probe-info-label info-label">上传 / 下载</span><span class="font-medium info-value">{{ formatBytes(probeDetail.net_tx) }} / {{ formatBytes(probeDetail.net_rx) }}</span></div>
                             <div class="flex flex-col"><span class="probe-info-label info-label">启动时间</span><span class="font-medium info-value">{{ probeDetail.boot_time || 'N/A' }}</span></div>
                         </div>
                     </div>
                     
-                    <div class="probe-charts-grid charts-grid">
+                    <div class="probe-charts-grid probe-detail-charts charts-grid">
                         <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">CPU <span class="stat-val">{{ probeDetail.cpu || 0 }}%</span></h3><canvas id="probeChartCPU"></canvas></div>
                         <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">内存 <span class="stat-val">{{ probeDetail.ram || 0 }}%</span></h3><div class="text-xs text-gray-500 mb-1">Swap: {{ probeDetail.swap_used }} / {{ probeDetail.swap_total }} MiB</div><canvas id="probeChartRAM"></canvas></div>
                         <div class="probe-chart-card chart-card">
                             <h3 class="mt-0 text-base flex justify-between">磁盘 <span class="stat-val">{{ probeDetail.disk || 0 }}%</span></h3>
-                            <div class="w-full h-5 bg-gray-200 rounded-full overflow-hidden mt-10"><div id="disk-bar" class="h-full transition-all duration-500" :style="{width: (probeDetail.disk || 0) + '%', background: '#34d399'}"></div></div>
+                            <div class="probe-disk-track"><div id="disk-bar" class="probe-disk-fill" :style="{width: (probeDetail.disk || 0) + '%'}"></div></div>
                             <p class="text-right text-xs text-gray-500 mt-2">{{ (probeDetail.disk_used/1024).toFixed(2) }} GiB / {{ (probeDetail.disk_total/1024).toFixed(2) }} GiB</p>
                         </div>
                         <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">进程数 <span class="stat-val">{{ probeDetail.processes || 0 }}</span></h3><canvas id="probeChartProc"></canvas></div>

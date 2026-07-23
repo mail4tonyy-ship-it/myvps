@@ -63,6 +63,10 @@ last_self_update = 0
 heartbeat_wakeup = threading.Event()
 config_wakeup = threading.Event()
 SELF_UPDATE_INTERVAL = 21600
+cached_os = ""
+cached_arch = ""
+cached_cpu_info = ""
+cached_virt = ""
 
 def require_https_url(value, name):
     parsed = urllib.parse.urlsplit(value or "")
@@ -183,10 +187,42 @@ def read_text(path, default=""):
     except Exception:
         return default
 
+def run_text(command, timeout=3):
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+def os_pretty_name():
+    global cached_os
+    if cached_os:
+        return cached_os
+    try:
+        with open("/etc/os-release", "r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                if line.startswith("PRETTY_NAME="):
+                    cached_os = line.split("=", 1)[1].strip().strip('"')
+                    return cached_os
+    except Exception:
+        pass
+    cached_os = run_text("uname -srm") or platform.platform()
+    return cached_os
+
+def arch_name():
+    global cached_arch
+    if not cached_arch:
+        cached_arch = run_text("uname -m") or platform.machine() or ""
+    return cached_arch
+
 def cpu_model():
+    global cached_cpu_info
+    if cached_cpu_info:
+        return cached_cpu_info
     processor = " ".join(platform.processor().split())
     if processor:
-        return processor
+        cached_cpu_info = processor
+        return cached_cpu_info
     try:
         with open("/proc/cpuinfo", "r", encoding="utf-8", errors="ignore") as handle:
             for line in handle:
@@ -196,12 +232,17 @@ def cpu_model():
                 if key.strip().lower() in {"model name", "hardware", "processor"}:
                     model = " ".join(value.strip().split())
                     if model and not model.isdigit():
-                        return model
+                        cached_cpu_info = model
+                        return cached_cpu_info
     except Exception:
         pass
-    return platform.machine() or ""
+    cached_cpu_info = platform.machine() or ""
+    return cached_cpu_info
 
 def virtualization_type():
+    global cached_virt
+    if cached_virt:
+        return cached_virt
     product = read_text("/sys/class/dmi/id/product_name")
     vendor = read_text("/sys/class/dmi/id/sys_vendor")
     board = read_text("/sys/class/dmi/id/board_vendor")
@@ -223,20 +264,43 @@ def virtualization_type():
     ]
     for marker, label in known:
         if marker in dmi:
-            return label
+            cached_virt = label
+            return cached_virt
     try:
         result = subprocess.run(["systemd-detect-virt"], capture_output=True, text=True, timeout=2)
         detected = result.stdout.strip()
         if result.returncode == 0 and detected and detected != "none":
-            return detected
+            cached_virt = detected.upper()
+            return cached_virt
     except Exception:
         pass
+    init_env = read_text("/proc/1/environ").lower()
     cpuinfo = read_text("/proc/cpuinfo").lower()
+    if "lxc" in init_env:
+        cached_virt = "LXC"
+        return cached_virt
+    if "docker" in init_env or os.path.exists("/.dockerenv"):
+        cached_virt = "DOCKER"
+        return cached_virt
+    if os.path.exists("/proc/user_beancounters"):
+        cached_virt = "OPENVZ"
+        return cached_virt
+    if "kvm" in cpuinfo:
+        cached_virt = "KVM"
+        return cached_virt
+    if "qemu" in cpuinfo:
+        cached_virt = "QEMU"
+        return cached_virt
     if "hypervisor" in cpuinfo:
-        return "KVM/Hypervisor"
-    return ""
+        cached_virt = "KVM/Physical"
+        return cached_virt
+    cached_virt = "Physical"
+    return cached_virt
 
 def boot_time_text():
+    value = run_text("uptime -s 2>/dev/null || stat -c %y / 2>/dev/null | cut -d'.' -f1", timeout=3)
+    if value:
+        return value
     try:
         uptime_seconds = float(read_first_line("/proc/uptime", "0").split()[0])
         return datetime.fromtimestamp(time.time() - uptime_seconds).strftime("%Y-%m-%d %H:%M:%S")
@@ -385,7 +449,7 @@ def uptime_text():
     days, rem = divmod(seconds, 86400)
     hours, rem = divmod(rem, 3600)
     minutes = rem // 60
-    return f"{days}d {hours}h {minutes}m"
+    return f"{days} days, {hours:02d}:{minutes:02d}" if days > 0 else f"{hours:02d}:{minutes:02d}"
 
 def collect_status(policy=None):
     rx, tx = net_totals()
@@ -393,7 +457,10 @@ def collect_status(policy=None):
     tcp_conn, udp_conn = count_connections()
     mem = mem_info()
     disk = disk_info()
-    load_avg = os.getloadavg()[0] if hasattr(os, "getloadavg") else 0
+    try:
+        load_avg = " ".join(read_first_line("/proc/loadavg", "0.00 0.00 0.00").split()[:3])
+    except Exception:
+        load_avg = f"{os.getloadavg()[0]:.2f}" if hasattr(os, "getloadavg") else "0.00"
     boot_time = boot_time_text()
     cpu_name = cpu_model()
     return {
@@ -401,7 +468,7 @@ def collect_status(policy=None):
         "name": socket.gethostname(),
         "report_id": f"{VPS_IP}:{int(time.time() * 1000)}",
         "cpu": cpu_percent(),
-        "load": f"{load_avg:.2f}",
+        "load": load_avg,
         "uptime": uptime_text(),
         "net_rx": rx,
         "net_tx": tx,
@@ -411,8 +478,8 @@ def collect_status(policy=None):
         "udp_conn": udp_conn,
         "node_traffic": [],
         "argo_urls": [],
-        "os": platform.platform(),
-        "arch": platform.machine(),
+        "os": os_pretty_name(),
+        "arch": arch_name(),
         "virt": virtualization_type(),
         "cpu_info": cpu_name[:160],
         "boot_time": boot_time,
