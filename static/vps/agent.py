@@ -176,6 +176,73 @@ def read_first_line(path, default=""):
     except Exception:
         return default
 
+def read_text(path, default=""):
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+            return handle.read().strip()
+    except Exception:
+        return default
+
+def cpu_model():
+    processor = " ".join(platform.processor().split())
+    if processor:
+        return processor
+    try:
+        with open("/proc/cpuinfo", "r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                if key.strip().lower() in {"model name", "hardware", "processor"}:
+                    model = " ".join(value.strip().split())
+                    if model and not model.isdigit():
+                        return model
+    except Exception:
+        pass
+    return platform.machine() or ""
+
+def virtualization_type():
+    product = read_text("/sys/class/dmi/id/product_name")
+    vendor = read_text("/sys/class/dmi/id/sys_vendor")
+    board = read_text("/sys/class/dmi/id/board_vendor")
+    dmi = " ".join([product, vendor, board]).lower()
+    known = [
+        ("google", "GCE/KVM"),
+        ("amazon", "EC2/Nitro"),
+        ("microsoft", "Hyper-V"),
+        ("vmware", "VMware"),
+        ("virtualbox", "VirtualBox"),
+        ("qemu", "KVM"),
+        ("kvm", "KVM"),
+        ("xen", "Xen"),
+        ("openstack", "OpenStack"),
+        ("digitalocean", "KVM"),
+        ("alibaba", "Alibaba Cloud"),
+        ("tencent", "Tencent Cloud"),
+        ("oracle", "Oracle Cloud"),
+    ]
+    for marker, label in known:
+        if marker in dmi:
+            return label
+    try:
+        result = subprocess.run(["systemd-detect-virt"], capture_output=True, text=True, timeout=2)
+        detected = result.stdout.strip()
+        if result.returncode == 0 and detected and detected != "none":
+            return detected
+    except Exception:
+        pass
+    cpuinfo = read_text("/proc/cpuinfo").lower()
+    if "hypervisor" in cpuinfo:
+        return "KVM/Hypervisor"
+    return ""
+
+def boot_time_text():
+    try:
+        uptime_seconds = float(read_first_line("/proc/uptime", "0").split()[0])
+        return datetime.fromtimestamp(time.time() - uptime_seconds).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return ""
+
 def cpu_percent():
     global prev_cpu_total, prev_cpu_idle
     line = read_first_line("/proc/stat")
@@ -269,14 +336,30 @@ def count_connections():
             pass
     return tcp, udp
 
-DEFAULT_PING_HOSTS = {
-    "ct": "180.76.76.76",
-    "cu": "119.29.29.29",
-    "cm": "223.5.5.5",
-    "bd": "www.bytedance.com",
+DEFAULT_PING_TARGETS = {
+    "ct": ("www.189.cn", 443),
+    "cu": ("www.10010.com", 443),
+    "cm": ("www.10086.cn", 443),
+    "bd": ("www.bytedance.com", 443),
 }
 
-def ping_ms(host):
+def tcp_ms(host, port=443):
+    if not host:
+        return 0
+    started = time.monotonic()
+    try:
+        with socket.create_connection((host, int(port)), timeout=3):
+            return max(1, int((time.monotonic() - started) * 1000))
+    except Exception:
+        return 0
+
+def ping_ms(target):
+    if isinstance(target, (list, tuple)):
+        host = target[0]
+        port = target[1] if len(target) > 1 else 443
+    else:
+        host = target
+        port = 443
     if not host:
         return 0
     try:
@@ -286,12 +369,12 @@ def ping_ms(host):
             return int(float(output.split(marker, 1)[1].split()[0]))
     except Exception:
         pass
-    return 0
+    return tcp_ms(host, port)
 
 def policy_ping_host(policy, key):
     host = (policy or {}).get(f"ping_{key}")
     if not host or host == "default":
-        return DEFAULT_PING_HOSTS[key]
+        return DEFAULT_PING_TARGETS[key]
     return host
 
 def uptime_text():
@@ -311,8 +394,8 @@ def collect_status(policy=None):
     mem = mem_info()
     disk = disk_info()
     load_avg = os.getloadavg()[0] if hasattr(os, "getloadavg") else 0
-    boot_time = datetime.fromtimestamp(time.time() - float(read_first_line("/proc/uptime", "0").split()[0])).strftime("%Y-%m-%d %H:%M:%S")
-    cpu_name = " ".join(platform.processor().split()) or read_first_line("/proc/cpuinfo").replace("model name", "").replace(":", "").strip()
+    boot_time = boot_time_text()
+    cpu_name = cpu_model()
     return {
         "ip": VPS_IP,
         "name": socket.gethostname(),
@@ -330,7 +413,7 @@ def collect_status(policy=None):
         "argo_urls": [],
         "os": platform.platform(),
         "arch": platform.machine(),
-        "virt": "",
+        "virt": virtualization_type(),
         "cpu_info": cpu_name[:160],
         "boot_time": boot_time,
         "processes": len(os.listdir("/proc")) if os.path.isdir("/proc") else 0,

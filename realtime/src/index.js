@@ -68,13 +68,17 @@ function sanitizeSnapshot(snapshot) {
   if (!snapshot?.ip || !snapshot.core) return null;
   const core = snapshot.core;
   return {
-    ip: snapshot.ip,
-    core: {
-      cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime,
-      net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed,
-      tcp_conn: core.tcp_conn, udp_conn: core.udp_conn,
-      ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd,
-    },
+      ip: snapshot.ip,
+      core: {
+        cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime,
+        net_rx: core.net_rx, net_tx: core.net_tx,
+        net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed,
+        tcp_conn: core.tcp_conn, udp_conn: core.udp_conn,
+        ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd,
+        os: core.os, arch: core.arch, virt: core.virt, cpu_info: core.cpu_info, boot_time: core.boot_time,
+        ram_used: core.ram_used, ram_total: core.ram_total, swap_used: core.swap_used, swap_total: core.swap_total,
+        disk_used: core.disk_used, disk_total: core.disk_total, processes: core.processes,
+      },
     core_last_seen: snapshot.core_last_seen || 0,
     core_state: snapshot.core_state || "offline",
     updated_at: snapshot.updated_at || 0,
@@ -83,7 +87,7 @@ function sanitizeSnapshot(snapshot) {
 
 function compactRoleState(role, data) {
   if (role === "core") {
-    const keys = ["cpu", "mem", "disk", "load", "uptime", "net_in_speed", "net_out_speed", "tcp_conn", "udp_conn", "ping_ct", "ping_cu", "ping_cm", "ping_bd", "os", "arch"];
+    const keys = ["cpu", "mem", "disk", "load", "uptime", "net_rx", "net_tx", "net_in_speed", "net_out_speed", "tcp_conn", "udp_conn", "ping_ct", "ping_cu", "ping_cm", "ping_bd", "os", "arch", "virt", "cpu_info", "boot_time", "ram_used", "ram_total", "swap_used", "swap_total", "disk_used", "disk_total", "processes"];
     return Object.fromEntries(keys.filter(key => data?.[key] !== undefined).map(key => [key, data[key]]));
   }
   return {
@@ -531,6 +535,8 @@ export class DashboardHub extends DurableObject {
         COALESCE(p.disk, s.disk, 0) AS disk,
         COALESCE(p.load_avg, s.load, '') AS load,
         COALESCE(p.uptime, s.uptime, '') AS uptime,
+        COALESCE(p.net_rx, 0) AS net_rx,
+        COALESCE(p.net_tx, 0) AS net_tx,
         COALESCE(p.net_in_speed, s.net_in_speed, 0) AS net_in_speed,
         COALESCE(p.net_out_speed, s.net_out_speed, 0) AS net_out_speed,
         COALESCE(p.tcp_conn, s.tcp_conn, 0) AS tcp_conn,
@@ -541,6 +547,16 @@ export class DashboardHub extends DurableObject {
         COALESCE(p.ping_bd, 0) AS ping_bd,
         COALESCE(p.os, '') AS os,
         COALESCE(p.arch, '') AS arch,
+        COALESCE(p.virt, '') AS virt,
+        COALESCE(p.cpu_info, '') AS cpu_info,
+        COALESCE(p.boot_time, '') AS boot_time,
+        COALESCE(p.ram_used, 0) AS ram_used,
+        COALESCE(p.ram_total, 0) AS ram_total,
+        COALESCE(p.swap_used, 0) AS swap_used,
+        COALESCE(p.swap_total, 0) AS swap_total,
+        COALESCE(p.disk_used, 0) AS disk_used,
+        COALESCE(p.disk_total, 0) AS disk_total,
+        COALESCE(p.processes, 0) AS processes,
         COALESCE(p.last_updated, s.last_report, 0) AS last_report
       FROM servers s
       LEFT JOIN probe_servers p ON p.id = s.ip
@@ -556,7 +572,7 @@ export class DashboardHub extends DurableObject {
       return {
         ip,
         transport: "http",
-        core: { cpu: row.cpu, mem: row.mem, disk: row.disk, load: row.load, uptime: row.uptime, net_in_speed: row.net_in_speed, net_out_speed: row.net_out_speed, tcp_conn: row.tcp_conn, udp_conn: row.udp_conn, ping_ct: row.ping_ct, ping_cu: row.ping_cu, ping_cm: row.ping_cm, ping_bd: row.ping_bd, os: row.os, arch: row.arch },
+        core: { cpu: row.cpu, mem: row.mem, disk: row.disk, load: row.load, uptime: row.uptime, net_rx: row.net_rx, net_tx: row.net_tx, net_in_speed: row.net_in_speed, net_out_speed: row.net_out_speed, tcp_conn: row.tcp_conn, udp_conn: row.udp_conn, ping_ct: row.ping_ct, ping_cu: row.ping_cu, ping_cm: row.ping_cm, ping_bd: row.ping_bd, os: row.os, arch: row.arch, virt: row.virt, cpu_info: row.cpu_info, boot_time: row.boot_time, ram_used: row.ram_used, ram_total: row.ram_total, swap_used: row.swap_used, swap_total: row.swap_total, disk_used: row.disk_used, disk_total: row.disk_total, processes: row.processes },
         core_last_seen: row.last_report || 0,
         core_state: Date.now() - (row.last_report || 0) < 360000 ? "online" : Date.now() - (row.last_report || 0) < 1200000 ? "stale" : "offline",
         updated_at: row.last_report || 0,

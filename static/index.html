@@ -95,6 +95,8 @@
         .probe-header-action.active { background: #fff; color: #3b82f6; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
         .probe-header-return { background: rgba(16,185,129,.12); color: #059669; }
         .probe-header-return:hover { background: rgba(16,185,129,.18); }
+        .probe-detail-return { background: #fff; color: #2563eb; border: 1px solid rgba(37,99,235,.16); box-shadow: 0 6px 18px rgba(15,23,42,.08); }
+        .probe-detail-return:hover { color: #1d4ed8; background: #f8fbff; transform: translateY(-1px); }
         .probe-filter-bar { display: flex; gap: 10px; margin: -10px 0 20px; flex-wrap: wrap; }
         .probe-filter-tag { display: inline-flex; align-items: center; gap: 5px; background: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor:pointer; border: 1px solid transparent;}
         .probe-filter-tag.active { background: #3b82f6; color: white; }
@@ -286,7 +288,6 @@
             <div class="probe-container">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 header">
                     <h1 class="m-0 flex items-center gap-3 min-w-0">
-                        <span v-if="probeDetailId" @click="probeDetailId = null" class="cursor-pointer text-blue-500 hover:underline text-sm font-medium shrink-0">⬅ 返回</span>
                         <span class="probe-brand-logo">
                             <span class="probe-brand-mark">⚡</span>
                             <span class="probe-brand-text">
@@ -302,6 +303,9 @@
                         <button class="probe-header-action" :class="{active: probeView === 'map'}" @click="setProbeView('map')">地图</button>
                         <button v-if="!isLoggedIn" @click="showLoginModal = true" class="probe-header-action probe-header-return">MyVps 面板</button>
                         <button v-else @click="activeTab = (role === 'admin' ? 'nodes' : 'dashboard')" class="probe-header-action probe-header-return">返回面板</button>
+                    </div>
+                    <div class="probe-header-actions" v-else>
+                        <button @click="probeDetailId = null" class="probe-header-action probe-detail-return">← 返回大盘</button>
                     </div>
                 </div>
 
@@ -337,7 +341,7 @@
                         <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">网络速度 <span class="text-sm speed-val"><span class="text-emerald-500">↓</span> {{ formatBytes(probeDetail.net_in_speed) }}/s | <span class="text-blue-500">↑</span> {{ formatBytes(probeDetail.net_out_speed) }}/s</span></h3><canvas id="probeChartNet"></canvas></div>
                         <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">TCP / UDP <span class="text-sm speed-val">TCP {{ probeDetail.tcp_conn || 0 }} | UDP {{ probeDetail.udp_conn || 0 }}</span></h3><canvas id="probeChartConn"></canvas></div>
                         <div class="probe-chart-card probe-chart-full chart-card chart-full">
-                            <h3 class="mt-0 text-base flex justify-between">国内延迟追踪 (24小时) <span class="text-xs font-normal speed-val">电信 <b>{{ probeDetail.ping_ct || 0 }}ms</b> | 联通 <b>{{ probeDetail.ping_cu || 0 }}ms</b> | 移动 <b>{{ probeDetail.ping_cm || 0 }}ms</b> | 字节 <b>{{ probeDetail.ping_bd || 0 }}ms</b></span></h3>
+                            <h3 class="mt-0 text-base flex justify-between">国内延迟追踪 (24小时) <span class="text-xs font-normal speed-val">电信 <b>{{ formatPing(probeDetail.ping_ct) }}</b> | 联通 <b>{{ formatPing(probeDetail.ping_cu) }}</b> | 移动 <b>{{ formatPing(probeDetail.ping_cm) }}</b> | 字节 <b>{{ formatPing(probeDetail.ping_bd) }}</b></span></h3>
                             <canvas id="probeChartPing"></canvas>
                         </div>
                     </div>
@@ -386,10 +390,10 @@
                                         </div>
                                         <div class="item-ping">
                                             <div class="probe-ping-box ping-box">
-                                                <span class="ping-item">电信 <span class="font-bold" :style="{color: getPingColor(s.ping_ct)}">{{ s.ping_ct === '0' ? '超时' : s.ping_ct + 'ms' }}</span></span>
-                                                <span class="ping-item">联通 <span class="font-bold" :style="{color: getPingColor(s.ping_cu)}">{{ s.ping_cu === '0' ? '超时' : s.ping_cu + 'ms' }}</span></span>
-                                                <span class="ping-item">移动 <span class="font-bold" :style="{color: getPingColor(s.ping_cm)}">{{ s.ping_cm === '0' ? '超时' : s.ping_cm + 'ms' }}</span></span>
-                                                <span class="ping-item">字节 <span class="font-bold" :style="{color: getPingColor(s.ping_bd)}">{{ s.ping_bd === '0' ? '超时' : s.ping_bd + 'ms' }}</span></span>
+                                                <span class="ping-item">电信 <span class="font-bold" :style="{color: getPingColor(s.ping_ct)}">{{ formatPing(s.ping_ct) }}</span></span>
+                                                <span class="ping-item">联通 <span class="font-bold" :style="{color: getPingColor(s.ping_cu)}">{{ formatPing(s.ping_cu) }}</span></span>
+                                                <span class="ping-item">移动 <span class="font-bold" :style="{color: getPingColor(s.ping_cm)}">{{ formatPing(s.ping_cm) }}</span></span>
+                                                <span class="ping-item">字节 <span class="font-bold" :style="{color: getPingColor(s.ping_bd)}">{{ formatPing(s.ping_bd) }}</span></span>
                                             </div>
                                         </div>
                                     </div>
@@ -947,6 +951,10 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const getExpireText = (dateStr) => { if(!dateStr) return '永久'; const d = new Date(dateStr).getTime(); if(isNaN(d)) return '永久'; const diff = d - Date.now(); return diff > 0 ? Math.ceil(diff/86400000) + '天' : '已过期'; };
                 const getTrafficPercent = (used, limit) => { if (!limit || limit === 0) return 0; return Math.min((used / limit) * 100, 100); };
                 const getPingColor = (ping) => { const p = parseInt(ping); if (p === 0 || isNaN(p)) return '#9ca3af'; if (p < 100) return '#10b981'; if (p < 200) return '#f59e0b'; return '#ef4444'; };
+                const formatPing = (ping) => {
+                    const value = parseInt(ping);
+                    return !value || isNaN(value) ? '超时' : `${value}ms`;
+                };
 
                 const globalOnline = computed(() => servers.value.filter(s => isOnline(s.last_report, s.realtime_state)).length);
                 const globalTraffic = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_rx || 0) + parseFloat(s.net_tx || 0)), 0));
@@ -1257,17 +1265,61 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     const key = normalizeRealtimeKey(snapshot.ip);
                     if (snapshot.core) {
                         const timestamp = Number(snapshot.core_last_seen || snapshot.updated_at || 0);
-                        const server = servers.value.find(item => normalizeRealtimeKey(item.ip) === key);
-                        if (server && timestamp >= Number(server._realtime_ts || server.last_report || 0)) {
-                            const core = snapshot.core;
-                            Object.assign(server, { cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, os: core.os || server.os, arch: core.arch || server.arch, last_report: timestamp, realtime_state: snapshot.core_state, boot_id: snapshot.boot_id?.core, sequence: snapshot.sequence?.core, config_result: snapshot.core_config_result, config_result_at: snapshot.core_config_result_at, _realtime_ts: timestamp });
-                        }
                         const core = snapshot.core;
+                        const serverFields = (target = {}) => ({
+                            cpu: core.cpu,
+                            mem: core.mem,
+                            disk: core.disk,
+                            load: core.load,
+                            uptime: core.uptime,
+                            net_rx: core.net_rx ?? target.net_rx ?? 0,
+                            net_tx: core.net_tx ?? target.net_tx ?? 0,
+                            net_in_speed: core.net_in_speed,
+                            net_out_speed: core.net_out_speed,
+                            tcp_conn: core.tcp_conn,
+                            udp_conn: core.udp_conn,
+                            ping_ct: core.ping_ct,
+                            ping_cu: core.ping_cu,
+                            ping_cm: core.ping_cm,
+                            ping_bd: core.ping_bd,
+                            os: core.os || target.os,
+                            arch: core.arch || target.arch,
+                            virt: core.virt || target.virt,
+                            cpu_info: core.cpu_info || target.cpu_info,
+                            boot_time: core.boot_time || target.boot_time,
+                            ram_used: core.ram_used ?? target.ram_used ?? 0,
+                            ram_total: core.ram_total ?? target.ram_total ?? 0,
+                            swap_used: core.swap_used ?? target.swap_used ?? 0,
+                            swap_total: core.swap_total ?? target.swap_total ?? 0,
+                            disk_used: core.disk_used ?? target.disk_used ?? 0,
+                            disk_total: core.disk_total ?? target.disk_total ?? 0,
+                            processes: core.processes ?? target.processes ?? 0,
+                            last_report: timestamp,
+                            realtime_state: snapshot.core_state,
+                            boot_id: snapshot.boot_id?.core,
+                            sequence: snapshot.sequence?.core,
+                            config_result: snapshot.core_config_result,
+                            config_result_at: snapshot.core_config_result_at,
+                            _realtime_ts: timestamp
+                        });
+                        const probeFields = (target = {}) => {
+                            const fields = serverFields(target);
+                            return {
+                                ...fields,
+                                ram: core.mem,
+                                load_avg: core.load,
+                                last_updated: timestamp,
+                                realtime_state: snapshot.core_state,
+                                _realtime_ts: timestamp
+                            };
+                        };
+                        const server = servers.value.find(item => normalizeRealtimeKey(item.ip) === key);
+                        if (server && timestamp >= Number(server._realtime_ts || server.last_report || 0)) Object.assign(server, serverFields(server));
                         const adminProbe = adminProbeServers.value.find(item => normalizeRealtimeKey(item.id) === key);
-                        if (adminProbe && timestamp >= Number(adminProbe._realtime_ts || adminProbe.last_updated || 0)) Object.assign(adminProbe, { last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp });
+                        if (adminProbe && timestamp >= Number(adminProbe._realtime_ts || adminProbe.last_updated || 0)) Object.assign(adminProbe, probeFields(adminProbe));
                         const probe = publicProbeServers.value.find(item => normalizeRealtimeKey(item.id) === key);
-                        if (probe && timestamp >= Number(probe._realtime_ts || probe.last_updated || 0)) Object.assign(probe, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, os: core.os || probe.os, arch: core.arch || probe.arch, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp });
-                        if (normalizeRealtimeKey(probeDetail.value?.id) === key && timestamp >= Number(probeDetail.value?._realtime_ts || probeDetail.value?.last_updated || 0)) { Object.assign(probeDetail.value, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, ping_ct: core.ping_ct, ping_cu: core.ping_cu, ping_cm: core.ping_cm, ping_bd: core.ping_bd, os: core.os || probeDetail.value.os, arch: core.arch || probeDetail.value.arch, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp }); updateProbeDetailCharts(probeDetail.value); }
+                        if (probe && timestamp >= Number(probe._realtime_ts || probe.last_updated || 0)) Object.assign(probe, probeFields(probe));
+                        if (normalizeRealtimeKey(probeDetail.value?.id) === key && timestamp >= Number(probeDetail.value?._realtime_ts || probeDetail.value?.last_updated || 0)) { Object.assign(probeDetail.value, probeFields(probeDetail.value)); updateProbeDetailCharts(probeDetail.value); }
                     }
                     
                 };
@@ -1346,7 +1398,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 return { 
                     isLoggedIn, showLoginModal, loginUser, password, currentUser, role, activeTab, 
                     servers, nodes, users, newVps, newNodeParams, newUser, 
-                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addVps, openServerEdit, saveServerEdit, deleteVps, getNodesByIp, getVpsName, formatBytes, formatSystemStack, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, copyCommand,
+                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addVps, openServerEdit, saveServerEdit, deleteVps, getNodesByIp, getVpsName, formatBytes, formatSystemStack, formatDate, getExpireText, getTrafficPercent, getPingColor, formatPing, isOnline, generateCmd, copyCommand,
                     globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, generateUUIDForNewUser,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, serverEditModalOpen, editingServer, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain, 
