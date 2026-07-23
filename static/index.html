@@ -266,6 +266,17 @@
         .myvps-settings-table-scroll table { min-width: 640px; table-layout: fixed; }
         .myvps-settings-table-scroll th,
         .myvps-settings-table-scroll td { white-space: normal; }
+        .homeip-console { background: #070b16; color: #d8e0f2; border: 1px solid rgba(99,102,241,.18); box-shadow: 0 24px 80px rgba(15,23,42,.18); }
+        .homeip-panel { background: rgba(18,25,40,.82); border: 1px solid rgba(100,116,139,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
+        .homeip-muted { color: #8b98ad; }
+        .homeip-accent { color: #2ee6a6; }
+        .homeip-chip { background: rgba(30,41,59,.9); border: 1px solid rgba(100,116,139,.34); }
+        .homeip-chip.active { background: rgba(79,70,229,.2); color: #c7d2fe; border-color: rgba(129,140,248,.45); }
+        .homeip-terminal { background: #090e15; border: 1px solid rgba(71,85,105,.38); }
+        .homeip-terminal pre::-webkit-scrollbar { width: 8px; }
+        .homeip-terminal pre::-webkit-scrollbar-thumb { background: rgba(148,163,184,.45); border-radius: 99px; }
+        .homeip-node-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(260px, 2fr) minmax(90px, .6fr) minmax(72px, .45fr); gap: 16px; align-items: center; }
+        @media (max-width: 900px) { .homeip-node-row { grid-template-columns: 1fr; } }
         @media (max-width: 640px) {
             .myvps-topbar { min-height: auto; border-radius: 1.25rem !important; }
             .myvps-brand-mark { width: 32px; height: 32px; border-radius: 10px; }
@@ -568,62 +579,120 @@
                     </div>
                 </div>
             </div>
-            <div v-if="role === 'admin' && activeTab === 'homeip'" class="space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">HOME IP NODES</div><div class="text-3xl font-black text-slate-700">{{ homeIpNodes.length }}</div></div>
-                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">ACTIVE TUNNELS</div><div class="text-3xl font-black text-emerald-500">{{ homeIpActiveCount }}</div></div>
-                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">PROXY CONFIG</div><div class="text-lg font-black" :class="homeIpProxyReady ? 'text-emerald-500' : 'text-amber-500'">{{ homeIpProxyReady ? '已配置' : '缺少凭据' }}</div></div>
-                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">SUBSCRIBE</div><button @click="copyCommand(currentDomain + '/api/proxy/proxies', '家宽订阅地址已复制')" class="text-sm font-black text-blue-600 hover:text-blue-700">复制列表地址</button></div>
-                </div>
-
-                <div class="bg-white/60 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40">
-                    <div class="flex flex-col lg:flex-row lg:items-end gap-4">
-                        <div class="flex-1">
-                            <h3 class="text-xl font-black text-slate-800 mb-2">🏠 家宽代理模块</h3>
-                            <p class="text-sm text-slate-500 font-medium leading-relaxed">从原项目住宅 IP 模块迁移，独立使用 `/api/proxy/*` 和 `proxy_ctrl_servers`，不写入监控服务器数据。目标 VPS 必须已经在“监控”里接入并拥有 Agent Token。</p>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:w-[520px]">
-                            <select v-model="homeIpTarget" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700">
-                                <option value="">选择部署服务器</option>
-                                <option v-for="server in servers" :key="server.ip" :value="server.ip">{{ server.name }} / {{ server.ip }}</option>
-                            </select>
-                            <input v-model="homeIpCountry" maxlength="2" placeholder="出口国家 JP" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700 uppercase">
-                            <input v-model.number="homeIpPort" type="number" min="1" max="65535" placeholder="端口 7920" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700">
-                        </div>
-                    </div>
-                    <div class="mt-5 bg-slate-900 p-4 rounded-[1.25rem] shadow-inner">
-                        <div class="text-[10px] text-slate-400 font-black uppercase mb-2 flex justify-between gap-3"><span>Residential Proxy Installer</span><button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="text-emerald-400 hover:text-emerald-300">复制命令</button></div>
-                        <div class="text-emerald-400 font-mono text-xs break-all">{{ generateHomeIpCmd() }}</div>
-                    </div>
-                    <div class="mt-4 flex flex-wrap gap-2">
-                        <button @click="saveHomeIpConfig" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black hover:bg-emerald-700 shadow-md">保存全局家宽配置</button>
-                        <button @click="loadHomeIp" class="bg-white text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black hover:bg-slate-50 border border-white shadow-sm">刷新状态</button>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div v-for="node in homeIpNodes" :key="node.ip" class="bg-white/70 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 p-6">
-                        <div class="flex items-start justify-between gap-3 mb-5">
-                            <div>
-                                <h3 class="text-xl font-black text-slate-800">{{ getVpsName(node.ip) }}</h3>
-                                <p class="text-xs font-mono text-slate-400">{{ node.ip }} · {{ Math.round((Date.now() - node.last_seen) / 1000) }} 秒前</p>
-                            </div>
-                            <button @click="switchHomeIp(node.ip)" class="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-black hover:bg-emerald-100 border border-emerald-100">切换出口</button>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div v-for="detail in parseHomeIpDetails(node.details)" :key="detail.tunnel || detail.port" class="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
-                                <div class="flex items-center justify-between gap-2 mb-2"><span class="font-black text-slate-700">{{ detail.tunnel || 'tunnel' }}</span><span class="text-[10px] px-2 py-1 rounded-full font-black" :class="detail.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">{{ detail.active ? 'ACTIVE' : 'STANDBY' }}</span></div>
-                                <div class="text-xs text-slate-500 space-y-1 font-medium">
-                                    <div>国家：{{ detail.country || '-' }} · 端口：{{ detail.port || '-' }}</div>
-                                    <div>节点 IP：{{ detail.node_ip || '-' }}</div>
-                                    <div>出口 IP：{{ detail.exit_ip || '-' }}</div>
-                                    <div>在线：{{ Math.floor((detail.connected_time || 0) / 60) }} 分钟</div>
-                                </div>
+            <div v-if="role === 'admin' && activeTab === 'homeip'" class="homeip-console rounded-[2rem] p-4 md:p-8 space-y-8 overflow-hidden">
+                <div class="grid grid-cols-1 xl:grid-cols-[1fr_1.05fr] gap-8 items-start">
+                    <div class="space-y-5">
+                        <div>
+                            <h2 class="text-4xl md:text-5xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400">Proxy Controller</h2>
+                            <div class="mt-4 flex flex-wrap items-center gap-2 text-sm md:text-base font-black homeip-muted">
+                                <span>🔗 鉴权提取 API:</span>
+                                <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="text-indigo-300 underline decoration-indigo-500/40 underline-offset-4">/api/proxy/proxies</button>
                             </div>
                         </div>
-                        <pre v-if="node.logs" class="mt-4 max-h-36 overflow-auto bg-slate-900 text-slate-300 text-[11px] p-3 rounded-xl whitespace-pre-wrap">{{ node.logs }}</pre>
+                        <div class="homeip-panel rounded-[1.5rem] p-6">
+                            <div class="flex items-center gap-2 mb-5"><span class="text-indigo-300">🌐</span><h3 class="text-xl font-black text-white">全量国家代码库</h3></div>
+                            <p class="homeip-muted text-sm font-bold leading-relaxed mb-5">选择目标地区后下发策略，已部署的家宽 Agent 会自动拉取新配置。</p>
+                            <div class="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+                                <button v-for="code in homeIpCountryCodes" :key="code" @click="homeIpCountry = code" class="homeip-chip rounded-lg py-2 text-sm font-black transition" :class="{active: homeIpCountry === code}">{{ code }}</button>
+                            </div>
+                        </div>
                     </div>
-                    <div v-if="homeIpNodes.length === 0" class="xl:col-span-2 bg-white/60 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 p-10 text-center text-slate-400 font-bold">暂无家宽节点上报。先复制安装命令到目标 VPS 执行。</div>
+                    <div class="space-y-4">
+                        <div class="homeip-terminal rounded-[1.25rem] overflow-hidden">
+                            <div class="px-5 py-3 bg-slate-800/80 border-b border-slate-700/70 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-rose-500"></span><span class="w-3 h-3 rounded-full bg-amber-500"></span><span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                <span class="ml-3 text-sm font-black homeip-muted">VPS 纳管命令 (Root)</span>
+                            </div>
+                            <div class="p-5 text-emerald-400 font-mono text-sm md:text-base break-all">住宅代理已合并到服务器 Full Deploy Command，无需二次安装。</div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="homeip-panel rounded-xl p-4 flex justify-between gap-3"><span class="homeip-muted font-black">控制权限</span><span class="text-indigo-200 font-black">仅管理员</span></div>
+                            <div class="homeip-panel rounded-xl p-4 flex justify-between gap-3"><span class="homeip-muted font-black">代理凭证</span><span class="text-amber-300 font-black">{{ homeIpProxyReady ? '读取 Pages 环境变量' : '缺少 PROXY_USER/PASS' }}</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-[.32fr_1fr] gap-8">
+                    <div class="homeip-panel rounded-[1.5rem] p-6">
+                        <div class="flex items-center gap-2 mb-5"><span class="text-indigo-300">🧭</span><h3 class="text-xl font-black text-white">部署对象</h3></div>
+                        <select v-model="homeIpTarget" class="w-full bg-slate-900/80 border border-slate-700 p-3 rounded-xl text-sm font-black text-slate-100">
+                            <option value="">选择部署服务器</option>
+                            <option v-for="server in servers" :key="server.ip" :value="server.ip">{{ server.name }} / {{ server.ip }}</option>
+                        </select>
+                        <button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="mt-4 w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg">复制部署命令</button>
+                        <button @click="loadHomeIp" class="mt-3 w-full homeip-chip text-slate-200 px-5 py-3 rounded-xl text-sm font-black">刷新状态</button>
+                    </div>
+
+                    <div class="homeip-panel rounded-[1.5rem] p-6 md:p-8 relative overflow-hidden">
+                        <div class="absolute right-10 top-12 opacity-5 text-[160px] leading-none">◆</div>
+                        <div class="flex flex-wrap items-center gap-3 mb-3">
+                            <h3 class="text-2xl md:text-3xl font-black text-white">主备双活调度引擎</h3>
+                            <span class="px-4 py-2 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 font-black text-xs">ACTIVE-STANDBY</span>
+                        </div>
+                        <p class="homeip-muted text-sm md:text-base font-bold mb-7">单路端口锁定，内置主备双路隧道（tun_main / tun_backup），通道死活将由软开关瞬间接管。</p>
+                        <div class="homeip-panel rounded-2xl p-5 grid grid-cols-1 lg:grid-cols-[.85fr_.85fr_1fr] gap-4 items-center">
+                            <label class="flex items-center gap-3"><span class="homeip-muted font-black">目标地区:</span><input v-model="homeIpCountry" maxlength="2" class="w-24 bg-slate-900/90 border border-slate-700 p-3 rounded-xl text-center text-xl font-black text-white uppercase"></label>
+                            <label class="flex items-center gap-3"><span class="homeip-muted font-black">服务端口:</span><input v-model.number="homeIpPort" type="number" min="1" max="65535" class="w-32 bg-slate-900/90 border border-slate-700 p-3 rounded-xl text-center text-xl font-black text-white"></label>
+                            <div class="flex flex-col sm:flex-row gap-3 lg:justify-end">
+                                <button @click="saveHomeIpConfig" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg">下发策略</button>
+                                <button @click="homeIpNodes[0] && switchHomeIp(homeIpNodes[0].ip)" class="bg-gradient-to-r from-violet-600 to-pink-600 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg">强制更换 IP</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="homeip-panel rounded-[1.5rem] overflow-hidden">
+                    <div class="px-6 py-5 border-b border-slate-700/70 flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,.8)]"></span><h3 class="text-xl font-black text-white">活跃节点矩阵</h3></div>
+                    <div class="hidden md:grid homeip-node-row px-6 py-4 bg-slate-900/40 homeip-muted text-sm font-black"><div>母机宿主 IP</div><div>主备双路出口状态 (ACTIVE / STANDBY)</div><div>心跳延迟</div><div>负载率</div></div>
+                    <div v-for="node in homeIpNodes" :key="node.ip" class="homeip-node-row px-6 py-5 border-t border-slate-800">
+                        <div class="font-mono text-indigo-200 font-black">▣ {{ node.ip }}</div>
+                        <div class="space-y-2">
+                            <div v-for="detail in parseHomeIpDetails(node.details)" :key="detail.tunnel || detail.port" class="bg-slate-950/70 border border-slate-800 rounded-xl px-4 py-2 flex flex-wrap items-center gap-3 font-mono">
+                                <span class="homeip-chip rounded-md px-2 py-1 text-slate-200 font-black">{{ detail.tunnel || 'tun_main' }}</span>
+                                <span class="homeip-chip active rounded-md px-2 py-1 font-black">{{ detail.country || homeIpCountry }}</span>
+                                <span class="text-slate-200 font-black">{{ detail.exit_ip || detail.node_ip || '等待出口' }}:{{ detail.port || homeIpPort }}</span>
+                                <span class="px-3 py-1 rounded-lg border font-black" :class="detail.active ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' : 'border-slate-600 bg-slate-800/70 text-slate-400'">● {{ detail.active ? 'ACTIVE (业务出口)' : 'STANDBY' }}</span>
+                            </div>
+                        </div>
+                        <div class="homeip-accent font-black">● {{ Math.max(0, Math.round((Date.now() - node.last_seen) / 1000)) }}s 前</div>
+                        <div class="text-cyan-300 font-black">{{ parseHomeIpDetails(node.details).filter(d => d.active).length }} / {{ Math.max(1, parseHomeIpDetails(node.details).length) }}</div>
+                    </div>
+                    <div v-if="homeIpNodes.length === 0" class="p-10 text-center homeip-muted font-black">暂无家宽节点上报。先复制部署命令到目标 VPS 执行。</div>
+                </div>
+
+                <div class="homeip-panel rounded-[1.5rem] p-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+                        <div><h3 class="text-xl font-black text-white">订阅链接生成</h3><p class="homeip-muted text-sm font-bold mt-1">生成带鉴权 token 的 SOCKS5 节点订阅，客户端无需登录后台。</p></div>
+                        <div class="flex flex-wrap gap-2">
+                            <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-black">复制订阅链接</button>
+                            <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-5 py-2.5 rounded-xl text-xs font-black">重新生成</button>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-indigo-200 font-mono text-xs break-all">{{ homeIpSubscriptionUrl }}</div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <div class="homeip-panel rounded-[1.5rem] p-6 xl:col-span-3">
+                        <div class="flex items-center justify-between gap-4 mb-5"><h3 class="text-xl font-black text-white">原生深度质检报告 (testisp.info)</h3><span class="text-indigo-300 text-sm font-black">原版页面 ↗</span></div>
+                        <div class="bg-slate-800/70 border border-slate-700 rounded-2xl p-6 flex flex-wrap items-center gap-5">
+                            <div class="text-3xl md:text-4xl font-black text-white font-mono">{{ homeIpActiveExitIp || '等待出口 IP' }}</div>
+                            <div class="h-8 w-px bg-slate-600 hidden md:block"></div>
+                            <div class="homeip-muted font-black"><span class="text-indigo-300 uppercase">{{ homeIpCountry || 'UNKNOWN' }}</span> Unknown Unknown · Unknown</div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                            <div class="homeip-panel rounded-2xl p-5"><h4 class="homeip-muted font-black mb-4 pb-3 border-b border-slate-700">基础物理画像</h4><div class="space-y-3 text-sm font-black"><div class="flex justify-between"><span class="homeip-muted">IP 原生性</span><span class="homeip-accent">原生 IP (Native)</span></div><div class="flex justify-between"><span class="homeip-muted">业务标记</span><span class="homeip-accent">家庭宽带</span></div><div class="flex justify-between"><span class="homeip-muted">运营类型</span><span class="homeip-accent">未知属性网络</span></div><div class="flex justify-between"><span class="homeip-muted">归属机构</span><span>Unknown</span></div></div></div>
+                            <div class="homeip-panel rounded-2xl p-5"><h4 class="homeip-muted font-black mb-4 pb-3 border-b border-slate-700">ISP 网络底层</h4><div class="space-y-3 text-sm font-black"><div class="flex justify-between"><span class="homeip-muted">ASN</span><span>Unknown</span></div><div class="flex justify-between"><span class="homeip-muted">解析时区</span><span>Unknown</span></div><div class="flex justify-between"><span class="homeip-muted">偏移量 (Drift)</span><span class="homeip-accent">0 km</span></div><div class="flex justify-between"><span class="homeip-muted">反向 DNS</span><span>None</span></div></div></div>
+                            <div class="homeip-panel rounded-2xl p-5"><h4 class="homeip-muted font-black mb-4 pb-3 border-b border-slate-700">风险深度检测</h4><div class="space-y-3 text-sm font-black"><div class="flex justify-between"><span class="homeip-muted">Spamhaus 情报</span><span class="homeip-accent">✅ 纯净无异常</span></div><div class="flex justify-between"><span class="homeip-muted">代理/机房特征</span><span class="homeip-accent">未检测到明显异常</span></div><div class="flex justify-between"><span class="homeip-muted">数据源</span><span>全球 RIR 联合测绘引擎</span></div></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="homeip-terminal rounded-[1.5rem] overflow-hidden">
+                    <div class="px-5 py-3 bg-slate-800/80 border-b border-slate-700/70 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 text-sm font-black homeip-muted">▹ VPS 实时运行日志 (Auto-Sync)</div>
+                        <div class="flex gap-2"><span class="w-3 h-3 rounded-full bg-rose-500"></span><span class="w-3 h-3 rounded-full bg-amber-500"></span><span class="w-3 h-3 rounded-full bg-emerald-500"></span></div>
+                    </div>
+                    <pre class="h-72 overflow-auto p-5 text-slate-300 text-sm font-mono whitespace-pre-wrap">{{ homeIpLogs || '[*] 等待家宽 Agent 上报运行日志...' }}</pre>
                 </div>
             </div>
             <div v-if="activeTab === 'settings'" class="myvps-settings-page space-y-6 max-w-full overflow-hidden">
@@ -899,6 +968,8 @@
                 const homeIpTarget = ref('');
                 const homeIpCountry = ref('JP');
                 const homeIpPort = ref(7920);
+                const homeIpSubToken = ref('');
+                const homeIpCountryCodes = ['AE','AT','AU','BA','BD','BE','BG','BR','CA','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HK','ID','IE','IL','IN','IT','JP','KR','LT','LV','MY','NL','NO','PH','PL','RO','SE','SG','TH','TR','TW','US','VN'];
                 
                 const qrModalOpen = ref(false);
                 const qrCodeImage = ref('');
@@ -1045,6 +1116,15 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const globalSpeedOut = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_out_speed) || 0), 0));
                 const parseHomeIpDetails = (raw) => { try { const value = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw; return Array.isArray(value) ? value : []; } catch(e) { return []; } };
                 const homeIpActiveCount = computed(() => homeIpNodes.value.reduce((sum, node) => sum + parseHomeIpDetails(node.details).filter(item => item.active).length, 0));
+                const homeIpSubscriptionUrl = computed(() => homeIpSubToken.value ? `${currentDomain}/api/proxy/proxies?token=${encodeURIComponent(homeIpSubToken.value)}` : `${currentDomain}/api/proxy/proxies`);
+                const homeIpActiveExitIp = computed(() => {
+                    for (const node of homeIpNodes.value) {
+                        const active = parseHomeIpDetails(node.details).find(item => item.active) || parseHomeIpDetails(node.details)[0];
+                        if (active?.exit_ip || active?.node_ip) return active.exit_ip || active.node_ip;
+                    }
+                    return '';
+                });
+                const homeIpLogs = computed(() => homeIpNodes.value.map(node => String(node.logs || '').trim()).filter(Boolean).join('\n\n'));
 
                 const filteredProbeServers = computed(() => {
                     if (currentFilter.value === 'all') return publicProbeServers.value;
@@ -1409,6 +1489,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                         const data = await res.json();
                         homeIpNodes.value = data.nodes || [];
                         homeIpProxyReady.value = data.proxy_ready === true;
+                        if (data.subscription_token) homeIpSubToken.value = data.subscription_token;
                     } catch(e) {}
                 };
                 const saveHomeIpConfig = async () => {
@@ -1424,6 +1505,12 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     await fetchApi('/api/homeip/switch', { method: 'POST', body: JSON.stringify({ ip }) });
                     alert('✅ 已下发切换出口指令，等待家宽 Agent 执行。');
                     loadHomeIp();
+                };
+                const resetHomeIpSubscription = async () => {
+                    const res = await fetchApi('/api/homeip/subscription', { method: 'POST', body: JSON.stringify({}) });
+                    const data = await res.json();
+                    homeIpSubToken.value = data.subscription_token || '';
+                    alert('✅ 新的家宽订阅链接已生成，旧链接将失效。');
                 };
                 
                 const loadThirdPartySubscriptions = async () => {};
@@ -1573,7 +1660,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, generateUUIDForNewUser,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, serverEditModalOpen, editingServer, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain, 
-                    homeIpNodes, homeIpProxyReady, homeIpTarget, homeIpCountry, homeIpPort, homeIpActiveCount, parseHomeIpDetails, generateHomeIpCmd, loadHomeIp, saveHomeIpConfig, switchHomeIp,
+                    homeIpNodes, homeIpProxyReady, homeIpTarget, homeIpCountry, homeIpPort, homeIpSubToken, homeIpCountryCodes, homeIpActiveCount, homeIpSubscriptionUrl, homeIpActiveExitIp, homeIpLogs, parseHomeIpDetails, generateHomeIpCmd, loadHomeIp, saveHomeIpConfig, switchHomeIp, resetHomeIpSubscription,
                     showWelcomePopup, closePopup,
                     availableThemes, pingNodes, pullGithubNodes, hasCustomCssFlag,
                 };

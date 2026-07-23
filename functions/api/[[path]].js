@@ -703,6 +703,11 @@ export async function onRequest(context) {
             if (user !== (env.ADMIN_USERNAME || 'admin') && !(await verifyAgent(request.headers.get('Authorization'), requestIp, db, env))) return new Response('Forbidden', { status: 403 });
             return await handleProxyAPI(request, env, context, sub);
         }
+        if (sub === 'proxies' && method === 'GET') {
+            const token = new URL(request.url).searchParams.get('token') || '';
+            const row = token ? await db.prepare("SELECT value FROM probe_settings WHERE key = 'homeip_sub_token'").first() : null;
+            if (row?.value && token === row.value) return await handleProxyAPI(request, env, context, sub);
+        }
         const user = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
         if (user !== (env.ADMIN_USERNAME || 'admin')) return new Response('Forbidden', { status: 403 });
         return await handleProxyAPI(request, env, context, sub);
@@ -716,7 +721,18 @@ export async function onRequest(context) {
         if (sub === 'summary' && method === 'GET') {
             const cutoff = Date.now() - 1800000;
             const { results } = await db.prepare('SELECT ip, details, last_seen FROM proxy_ctrl_servers WHERE last_seen >= ? ORDER BY last_seen DESC').bind(cutoff).all();
-            return Response.json({ nodes: results || [], proxy_ready: !!(env.PROXY_USER && env.PROXY_PASS), install_ready: true }, { headers: { 'Cache-Control': 'no-store' } });
+            let tokenRow = await db.prepare("SELECT value FROM probe_settings WHERE key = 'homeip_sub_token'").first();
+            if (!tokenRow?.value) {
+                const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+                await db.prepare("INSERT INTO probe_settings (key, value) VALUES ('homeip_sub_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(token).run();
+                tokenRow = { value: token };
+            }
+            return Response.json({ nodes: results || [], proxy_ready: !!(env.PROXY_USER && env.PROXY_PASS), install_ready: true, subscription_token: tokenRow.value }, { headers: { 'Cache-Control': 'no-store' } });
+        }
+        if (sub === 'subscription' && method === 'POST') {
+            const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+            await db.prepare("INSERT INTO probe_settings (key, value) VALUES ('homeip_sub_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(token).run();
+            return Response.json({ success: true, subscription_token: token }, { headers: { 'Cache-Control': 'no-store' } });
         }
         return await handleProxyAPI(request, env, context, sub);
     }
