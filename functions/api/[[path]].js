@@ -140,6 +140,36 @@ function yamlString(value) {
     return `"${String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n')}"`;
 }
 
+function clashProxyYaml(nodes) {
+    const names = nodes.map(node => node.name);
+    const proxyLines = nodes.length ? nodes.map(node => [
+        `  - name: ${yamlString(node.name)}`,
+        `    type: socks5`,
+        `    server: ${yamlString(node.server)}`,
+        `    port: ${node.port}`,
+        `    username: ${yamlString(node.username)}`,
+        `    password: ${yamlString(node.password)}`,
+        `    udp: true`,
+    ].join('\n')).join('\n') : '  []';
+    const groupProxies = names.length ? names.map(name => `      - ${yamlString(name)}`).join('\n') : '      - DIRECT';
+    return [
+        'mixed-port: 7890',
+        'allow-lan: false',
+        'mode: rule',
+        'log-level: warning',
+        'proxies:',
+        proxyLines,
+        'proxy-groups:',
+        '  - name: "MyVps"',
+        '    type: select',
+        '    proxies:',
+        groupProxies,
+        'rules:',
+        '  - MATCH,MyVps',
+        '',
+    ].join('\n');
+}
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
@@ -599,8 +629,8 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
     const method = request.method;
     const url = new URL(request.url);
     await ensureDbSchema(db);
-    const proxyUser = env.PROXY_USER || '';
-    const proxyPass = env.PROXY_PASS || '';
+    const proxyUser = env.PROXY_USER || 'kui';
+    const proxyPass = env.PROXY_PASS || 'kui';
     const proxyReady = !!(proxyUser && proxyPass);
 
     if (subPath === 'config') {
@@ -655,11 +685,16 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
     }
 
     if (subPath === 'proxies' && method === 'GET') {
-        const format = (url.searchParams.get('format') || 'base64').toLowerCase();
-        if (!proxyReady) return new Response(format === 'raw' ? '# MyVps: PROXY_USER and PROXY_PASS must be configured\n' : '', { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
+        const format = (url.searchParams.get('format') || 'clash').toLowerCase();
+        const textHeaders = { 'Content-Type': format === 'clash' ? 'text/yaml;charset=UTF-8' : 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' };
+        if (!proxyReady) {
+            const message = '# MyVps: PROXY_USER and PROXY_PASS must be configured\n';
+            return new Response(format === 'base64' ? base64Text(message) : message, { headers: textHeaders });
+        }
         const cutoff = Date.now() - 1800000;
         const { results } = await db.prepare('SELECT ip, details FROM proxy_ctrl_servers WHERE last_seen >= ?').bind(cutoff).all();
         const list = [];
+        const clashNodes = [];
         for (const server of results || []) {
             let details = [];
             try { details = JSON.parse(server.details || '[]'); } catch(e) {}
@@ -667,12 +702,16 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
             if (node?.port) {
                 const user = encodeURIComponent(proxyUser);
                 const pass = encodeURIComponent(proxyPass);
-                const name = encodeURIComponent(`${node.country || 'HOME'}_${node.node_ip || server.ip}`);
+                const rawName = `${node.country || 'HOME'}_${node.node_ip || server.ip}`;
+                const name = encodeURIComponent(rawName);
                 list.push(`socks5://${user}:${pass}@${server.ip}:${node.port}#${name}`);
+                clashNodes.push({ name: rawName, server: server.ip, port: Number(node.port), username: proxyUser, password: proxyPass });
             }
         }
         const body = list.join('\n');
-        return new Response(format === 'raw' ? body : base64Text(body), { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
+        if (format === 'raw') return new Response(body, { headers: textHeaders });
+        if (format === 'base64') return new Response(base64Text(body), { headers: textHeaders });
+        return new Response(clashProxyYaml(clashNodes), { headers: textHeaders });
     }
 
     return new Response('Not Found', { status: 404 });
@@ -736,7 +775,7 @@ export async function onRequest(context) {
                 await db.prepare("INSERT INTO probe_settings (key, value) VALUES ('homeip_sub_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(token).run();
                 tokenRow = { value: token };
             }
-            return Response.json({ nodes: results || [], proxy_ready: !!(env.PROXY_USER && env.PROXY_PASS), install_ready: true, subscription_token: tokenRow.value }, { headers: { 'Cache-Control': 'no-store' } });
+            return Response.json({ nodes: results || [], proxy_ready: !!((env.PROXY_USER || 'kui') && (env.PROXY_PASS || 'kui')), install_ready: true, subscription_token: tokenRow.value }, { headers: { 'Cache-Control': 'no-store' } });
         }
         if (sub === 'subscription' && method === 'POST') {
             const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
