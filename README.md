@@ -19,10 +19,13 @@
 
 1. 把本目录上传到公开 GitHub 仓库 `mail4tonyy-ship-it/myvps`。
 2. 在 GitHub 页面点击 **Deploy to Cloudflare**。
-3. Cloudflare 会自动 clone 仓库、创建 Worker、创建 D1 数据库并绑定到 `DB`。
-4. 部署页面里请把 `ADMIN_PASSWORD` 改成强密码。
+3. 部署命令使用 `npm run deploy`。这个命令会先根据项目名生成 D1 名称，再交给 Wrangler 部署。
+4. Cloudflare 会自动 clone 仓库、创建 Worker、首次部署时自动创建 D1 数据库，并绑定到 `DB`。
+5. 部署页面里请把 `ADMIN_PASSWORD` 改成强密码。
 
-Cloudflare 官方说明：Deploy Button 会根据 Wrangler 配置自动 provision D1 等资源，并在部署时补全资源 ID。
+D1 命名规则：读取 `wrangler.jsonc` 里的项目名，例如 `myvps`，自动生成 `myvps123` 这种格式，项目名后追加 3 位随机数字。`wrangler.jsonc` 里不要提前填写假的 `database_id`，Wrangler/Cloudflare 会在首次部署时自动创建并关联 D1。
+
+Cloudflare 官方说明：Deploy Button 会根据 Wrangler 配置自动 provision D1 等资源，并在部署时补全资源 ID。项目里使用 `scripts/prepare-cloudflare.mjs` 只负责生成符合规则的 D1 名称，不负责手动创建数据库。
 
 ## 手动部署
 
@@ -34,13 +37,13 @@ cp .dev.vars.example .dev.vars
 npm run deploy
 ```
 
-手动部署时，如果 Wrangler 要求真实 D1 ID，请先创建数据库：
+如果你要换项目名，先改 `wrangler.jsonc` 的 `name`，或者部署前设置环境变量：
 
 ```bash
-npx wrangler d1 create server-panorama-probe-db
+CF_PROJECT_NAME=myvps npm run deploy
 ```
 
-然后把输出的 `database_id` 填进 `wrangler.jsonc`。
+脚本会按最终项目名生成 D1 名称，例如 `myvps047`。
 
 ## 使用
 
@@ -60,6 +63,7 @@ server-panorama-probe/
   static/index.html            全景探针看板
   static/vps/install.sh        VPS 一键安装脚本
   static/vps/panorama-agent.py VPS 指标采集 agent
+  scripts/prepare-cloudflare.mjs 自动生成 D1 名称
   wrangler.jsonc               Cloudflare Workers 部署配置
   .dev.vars.example            本地/一键部署 secret 示例
 ```

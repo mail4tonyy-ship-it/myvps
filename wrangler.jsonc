@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "server-panorama-probe",
+  "name": "myvps",
   "main": "src/worker.js",
   "compatibility_date": "2026-07-15",
   "workers_dev": true,
@@ -15,8 +15,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "server-panorama-probe-db",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_name": "myvps000"
     }
   ],
   "triggers": {
