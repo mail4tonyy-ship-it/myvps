@@ -344,6 +344,8 @@ def collect_status(policy=None):
 
 def report_status(policy=None, force_http=False, allow_http=True):
     global global_interval, fast_mode, REALTIME_URL
+    if policy is None:
+        policy = {}
     payload = collect_status(policy)
     sent_ws = False
     if not force_http and realtime_channel and realtime_channel.connected:
@@ -352,6 +354,9 @@ def report_status(policy=None, force_http=False, allow_http=True):
         response = request_json(REPORT_URL, method="POST", payload=payload, timeout=30)
         global_interval = int(response.get("interval", global_interval) or global_interval)
         fast_mode = bool(response.get("fast_mode", False))
+        for key in ("ping_ct", "ping_cu", "ping_cm", "ping_bd", "report_interval"):
+            if response.get(key) is not None:
+                policy[key] = response[key]
         if response.get("realtime_url") and not REALTIME_URL:
             REALTIME_URL = require_https_url(response["realtime_url"], "realtime_url")
     return True
