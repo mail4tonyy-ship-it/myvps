@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>探针全景大盘</title>
+  <script src="https://unpkg.com/vue@3.5.17/dist/vue.global.prod.js"></script>
+  <script>if(!window.Vue)document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3.5.17/dist/vue.global.prod.js"><\/script>')</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    [v-cloak]{display:none!important}
+    :root{--bg:#f4f5f7;--card:#fff;--text:#172033;--muted:#667085;--line:#e6e9ef;--accent:#2f7df6;--good:#10b981;--bad:#ef4444;--warn:#f59e0b}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    body.theme2{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff}
+    body.theme3{--bg:#fef08a;--card:#fff;--text:#050505;--muted:#3f3f46;--line:#050505;--accent:#000}
+    body.theme4{--bg:linear-gradient(135deg,#4facfe,#00f2fe);--card:rgba(255,255,255,.22);--text:#fff;--muted:rgba(255,255,255,.78);--line:rgba(255,255,255,.42);--accent:#fff}
+    body.theme5{--bg:#050505;--card:#0b0c10;--text:#effcff;--muted:#ff5bf1;--line:#ff36ef;--accent:#00ffff}
+    body{background:var(--bg);min-height:100vh}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    .wrap{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:22px 0 40px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .mark{width:38px;height:38px;border-radius:10px;background:var(--accent);display:grid;place-items:center;color:var(--card);font-weight:900;box-shadow:0 8px 20px rgba(47,125,246,.25)}
+    h1{font-size:24px;margin:0;line-height:1.2;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sub{font-size:13px;color:var(--muted);margin-top:4px}
+    .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .seg{display:flex;gap:4px;background:rgba(0,0,0,.06);padding:4px;border-radius:8px}
+    body.theme2 .seg,body.theme5 .seg{background:rgba(255,255,255,.06)}
+    .seg button,.btn{border:1px solid transparent;background:transparent;color:var(--muted);border-radius:6px;padding:7px 12px;font-size:13px;font-weight:700}
+    .seg button.active{background:var(--card);color:var(--accent);border-color:var(--line)}
+    .btn{background:var(--card);border-color:var(--line);color:var(--text)}
+    .btn.primary{background:var(--accent);color:var(--card);border-color:var(--accent)}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 22px}
+    .stat,.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 2px 10px rgba(16,24,40,.04)}
+    body.theme3 .stat,body.theme3 .card,body.theme3 .panel{border:3px solid #000;border-radius:0;box-shadow:6px 6px 0 #000}
+    body.theme5 .stat,body.theme5 .card,body.theme5 .panel{box-shadow:0 0 14px rgba(255,0,255,.18);border-radius:0}
+    .stat{padding:16px;text-align:center}
+    .stat b{font-size:24px;display:block;margin-bottom:4px}
+    .stat span{font-size:12px;color:var(--muted);font-weight:700}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+    .chip{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:800}
+    .chip.active{background:var(--accent);border-color:var(--accent);color:var(--card)}
+    .group-title{font-size:18px;font-weight:900;margin:24px 0 12px;border-left:4px solid var(--accent);padding-left:10px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px}
+    .card{padding:16px;display:grid;grid-template-columns:170px 1fr;gap:14px;transition:.2s transform,.2s box-shadow}
+    .card:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(16,24,40,.09)}
+    .node-title{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:900;margin-bottom:8px}
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 4px rgba(239,68,68,.12)}
+    .dot.on{background:var(--good);box-shadow:0 0 0 4px rgba(16,185,129,.14)}
+    .meta{font-size:12px;color:var(--muted);line-height:1.7}
+    .badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+    .badge{font-size:10px;font-weight:900;color:#fff;padding:3px 7px;border-radius:5px;background:#667085}
+    .badge.blue{background:#2f7df6}.badge.green{background:#10b981}.badge.pink{background:#ec4899}
+    .metrics{border-left:1px solid var(--line);padding-left:14px}
+    .bar{margin-bottom:11px}
+    .bar-head{display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-bottom:5px}
+    .bar-track{height:7px;background:rgba(127,127,127,.18);border-radius:999px;overflow:hidden}
+    .bar-fill{height:100%;border-radius:999px}
+    .tiny{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    th,td{padding:13px 14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;white-space:nowrap}
+    th{color:var(--muted);font-size:12px;background:rgba(127,127,127,.06)}
+    tr:hover{background:rgba(127,127,127,.05)}
+    #map{height:500px;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:#b8c7d8}
+    .detail-head{padding:20px;margin-bottom:18px}
+    .info{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:14px}
+    .info label{display:block;font-size:12px;color:var(--muted);font-weight:800;margin-bottom:4px}
+    .info div{min-width:0}
+    .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+    .chart{padding:18px;min-height:220px}
+    .chart h3{margin:0 0 10px;font-size:15px}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;z-index:20}
+    .dialog{width:min(620px,100%);background:#fff;color:#172033;border-radius:18px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+    .dialog h2{margin:0 0 16px}
+    .field{display:grid;gap:6px;margin-bottom:12px}
+    .field label{font-size:12px;font-weight:800;color:#667085}
+    .field input,.field select{border:1px solid #d0d5dd;border-radius:10px;padding:11px 12px;width:100%}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .cmd{background:#0f172a;color:#dbeafe;border-radius:10px;padding:12px;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.6}
+    .empty{padding:56px 16px;text-align:center;color:var(--muted)}
+    .toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:12px 14px;border-radius:10px;z-index:30;font-size:13px;box-shadow:0 12px 30px rgba(0,0,0,.24)}
+    @media (max-width:760px){
+      .wrap{width:min(100% - 20px,1180px);padding-top:14px}
+      .topbar{align-items:flex-start;flex-direction:column}
+      .actions{justify-content:flex-start}
+      .stats{grid-template-columns:repeat(2,1fr)}
+      .grid{grid-template-columns:1fr}
+      .card{grid-template-columns:1fr}
+      .metrics{border-left:none;border-top:1px solid var(--line);padding-left:0;padding-top:12px}
+      .row{grid-template-columns:1fr}
+      #map{height:330px}
+    }
+  </style>
+</head>
+<body class="theme1">
+<div id="app" v-cloak>
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">K</div>
+        <div>
+          <h1>{{ settings.site_title || '探针全景大盘' }}</h1>
+          <div class="sub">{{ onlineCount }} 在线 / {{ servers.length }} 总节点 · {{ wsState }}</div>
+        </div>
+      </div>
+      <div class="actions" v-if="!detail">
+        <div class="seg">
+          <button :class="{active:view==='card'}" @click="setView('card')">卡片</button>
+          <button :class="{active:view==='table'}" @click="setView('table')">表格</button>
+          <button :class="{active:view==='map'}" @click="setView('map')">地图</button>
+        </div>
+        <select class="btn" v-model="settings.theme" @change="applyTheme(settings.theme); saveSettingsSoon()">
+          <option value="theme1">默认</option>
+          <option value="theme2">暗色</option>
+          <option value="theme3">粗线</option>
+          <option value="theme4">玻璃</option>
+          <option value="theme5">霓虹</option>
+        </select>
+        <button class="btn" @click="openAdmin">{{ isLoggedIn ? '管理' : '登录' }}</button>
+        <button v-if="isLoggedIn" class="btn" @click="logout">退出</button>
+      </div>
+      <button v-else class="btn" @click="closeDetail">返回大盘</button>
+    </header>
+
+    <section v-if="!detail" class="stats">
+      <div class="stat"><b>{{ onlineCount }}</b><span>在线节点</span></div>
+      <div class="stat"><b>{{ avgCpu }}%</b><span>平均 CPU</span></div>
+      <div class="stat"><b>{{ avgRam }}%</b><span>平均内存</span></div>
+      <div class="stat"><b>{{ formatBytes(totalTraffic) }}</b><span>本周期流量</span></div>
+    </section>
+
+    <section v-if="!detail && groups.length" class="filters">
+      <button class="chip" :class="{active:activeGroup==='全部'}" @click="activeGroup='全部'">全部</button>
+      <button v-for="g in groups" :key="g" class="chip" :class="{active:activeGroup===g}" @click="activeGroup=g">{{ g }}</button>
+    </section>
+
+    <section v-if="!detail && view==='card'">
+      <div v-if="!servers.length" class="panel empty">暂无探针节点，请登录管理后添加 VPS。</div>
+      <template v-for="group in groupedServers" :key="group.name">
+        <h2 class="group-title">{{ group.name }}</h2>
+        <div class="grid">
+          <article class="card" v-for="s in group.items" :key="s.id" @click="openDetail(s.id)">
+            <div>
+              <div class="node-title"><span class="dot" :class="{on:isOnline(s)}"></span>{{ s.name }}</div>
+              <div class="meta">
+                <div>{{ s.country || 'XX' }} · {{ s.ip_v4 || s.ip_v6 || s.id }}</div>
+                <div>{{ s.os || 'Unknown OS' }} · {{ s.arch || '-' }}</div>
+                <div>更新：{{ timeAgo(s.last_updated) }}</div>
+              </div>
+              <div class="badges">
+                <span v-if="settings.show_bw==='true' && s.bandwidth" class="badge blue">{{ s.bandwidth }}</span>
+                <span v-if="settings.show_tf==='true' && s.traffic_limit" class="badge green">{{ s.traffic_limit }}</span>
+                <span v-if="settings.show_expire==='true' && s.expire_date" class="badge pink">{{ s.expire_date }}</span>
+              </div>
+            </div>
+            <div class="metrics">
+              <metric label="CPU" :value="num(s.cpu)" color="#2f7df6"></metric>
+              <metric label="内存" :value="num(s.ram)" color="#10b981" :sub="formatBytes(s.ram_used)+' / '+formatBytes(s.ram_total)"></metric>
+              <metric label="磁盘" :value="num(s.disk)" color="#f59e0b" :sub="formatBytes(s.disk_used)+' / '+formatBytes(s.disk_total)"></metric>
+              <div class="tiny">网络：{{ formatSpeed(s.net_out_speed) }} ↑ / {{ formatSpeed(s.net_in_speed) }} ↓ · TCP {{ s.tcp_conn || 0 }} / UDP {{ s.udp_conn || 0 }}</div>
+            </div>
+          </article>
+        </div>
+      </template>
+    </section>
+
+    <section v-if="!detail && view==='table'" class="panel" style="overflow:auto">
+      <table>
+        <thead><tr><th>状态</th><th>名称</th><th>分组</th><th>CPU</th><th>内存</th><th>磁盘</th><th>网络</th><th>系统</th><th>更新</th></tr></thead>
+        <tbody>
+          <tr v-for="s in filteredServers" :key="s.id" @click="openDetail(s.id)">
+            <td><span class="dot" :class="{on:isOnline(s)}" style="display:inline-block"></span></td>
+            <td>{{ s.name }}</td><td>{{ s.server_group || '默认分组' }}</td><td>{{ s.cpu || 0 }}%</td><td>{{ s.ram || 0 }}%</td><td>{{ s.disk || 0 }}%</td>
+            <td>{{ formatSpeed(s.net_out_speed) }} ↑ / {{ formatSpeed(s.net_in_speed) }} ↓</td><td>{{ s.os || '-' }}</td><td>{{ timeAgo(s.last_updated) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-if="!detail && view==='map'"><div id="map"></div></section>
+
+    <section v-if="detail">
+      <div class="panel detail-head">
+        <h2 class="node-title" style="font-size:24px"><span class="dot" :class="{on:isOnline(detail)}"></span>{{ detail.name }}</h2>
+        <div class="info">
+          <div><label>运行时间</label>{{ detail.uptime || '-' }}</div><div><label>架构</label>{{ detail.arch || '-' }}</div>
+          <div><label>系统</label>{{ detail.os || '-' }}</div><div><label>虚拟化</label>{{ detail.virt || '-' }}</div>
+          <div><label>CPU</label>{{ detail.cpu_info || '-' }}</div><div><label>Load</label>{{ detail.load_avg || '-' }}</div>
+          <div><label>上传 / 下载</label>{{ formatBytes(detail.net_tx) }} / {{ formatBytes(detail.net_rx) }}</div><div><label>启动时间</label>{{ detail.boot_time || '-' }}</div>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="panel chart"><h3>CPU / 内存</h3><canvas id="chart-main"></canvas></div>
+        <div class="panel chart"><h3>网络速率</h3><canvas id="chart-net"></canvas></div>
+        <div class="panel chart"><h3>连接数</h3><canvas id="chart-conn"></canvas></div>
+      </div>
+    </section>
+  </main>
+
+  <div v-if="adminOpen" class="modal" @click.self="adminOpen=false">
+    <div class="dialog">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <h2 style="margin:0">{{ isLoggedIn ? '探针管理' : '管理员登录' }}</h2>
+        <button v-if="isLoggedIn" class="btn" @click="logout">退出登录</button>
+      </div>
+      <template v-if="!isLoggedIn">
+        <div class="field"><label>用户名</label><input v-model="login.username"></div>
+        <div class="field"><label>密码</label><input v-model="login.password" type="password" @keyup.enter="doLogin"></div>
+        <button class="btn primary" style="width:100%" @click="doLogin">登录</button>
+      </template>
+      <template v-else>
+        <div class="row">
+          <div class="field"><label>VPS 公网 IP</label><input v-model="newServer.ip" placeholder="例如 203.0.113.10"></div>
+          <div class="field"><label>名称</label><input v-model="newServer.name" placeholder="东京-1"></div>
+        </div>
+        <div class="field"><label>分组</label><input v-model="newServer.server_group" placeholder="默认分组"></div>
+        <button class="btn primary" style="width:100%" @click="addServer">添加并生成安装命令</button>
+        <div v-if="lastCommand" style="margin-top:14px">
+          <div class="field"><label>安装命令</label><div class="cmd">{{ lastCommand }}</div></div>
+          <button class="btn" @click="copy(lastCommand)">复制命令</button>
+        </div>
+        <div style="margin-top:18px;max-height:230px;overflow:auto">
+          <table>
+            <tbody>
+              <tr v-for="s in adminServers" :key="s.ip">
+                <td>{{ s.name }}<div class="tiny">{{ s.ip }}</div></td>
+                <td>{{ timeAgo(s.last_report) }}</td>
+                <td><button class="btn" @click="loadCommand(s.ip)">命令</button></td>
+                <td><button class="btn" @click="removeServer(s.ip)">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+  </div>
+  <div v-if="toast" class="toast">{{ toast }}</div>
+</div>
+
+<script>
+const { createApp } = Vue;
+const Metric = {
+  props:["label","value","color","sub"],
+  template:`<div class="bar"><div class="bar-head"><span>{{label}}</span><span>{{Math.round(value||0)}}%</span></div><div class="bar-track"><div class="bar-fill" :style="{width:Math.min(100,Math.max(0,value||0))+'%',background:color}"></div></div><div v-if="sub" class="tiny">{{sub}}</div></div>`
+};
+createApp({
+  components:{metric:Metric},
+  data(){return{settings:{...JSON.parse(JSON.stringify({site_title:"探针全景大盘",theme:"theme1"}))},servers:[],view:localStorage.probeView||"card",activeGroup:"全部",detail:null,charts:[],map:null,adminOpen:false,token:localStorage.probeToken||"",login:{username:"admin",password:""},newServer:{ip:"",name:"",server_group:"默认分组"},adminServers:[],lastCommand:"",toast:"",ws:null,wsState:"读取中",saveTimer:null}},
+  computed:{
+    isLoggedIn(){return !!this.token},
+    onlineCount(){return this.servers.filter(this.isOnline).length},
+    avgCpu(){return this.avg("cpu")},
+    avgRam(){return this.avg("ram")},
+    totalTraffic(){return this.servers.reduce((sum,s)=>sum+Number(s.monthly_rx||0)+Number(s.monthly_tx||0),0)},
+    groups(){return [...new Set(this.servers.map(s=>s.server_group||"默认分组"))]},
+    filteredServers(){return this.activeGroup==="全部"?this.servers:this.servers.filter(s=>(s.server_group||"默认分组")===this.activeGroup)},
+    groupedServers(){return this.groups.map(name=>({name,items:this.filteredServers.filter(s=>(s.server_group||"默认分组")===name)})).filter(g=>g.items.length)}
+  },
+  mounted(){this.load();this.checkMe();setInterval(()=>this.load(),30000)},
+  methods:{
+    headers(){return this.token?{Authorization:"Bearer "+this.token}:{}},
+    async api(path,opts={}){const res=await fetch(path,{...opts,headers:{...(opts.headers||{}),...this.headers()}});const data=await res.json().catch(()=>({error:res.statusText}));if(!res.ok)throw new Error(data.error||res.status);return data},
+    async load(){try{const data=await this.api("/api/probe/public");this.settings=data.settings||{};this.servers=data.servers||[];this.applyTheme(this.settings.theme||"theme1");this.connectWs();if(this.view==="map")this.$nextTick(this.renderMap)}catch(e){this.wsState=e.message}},
+    connectWs(){if(this.ws||location.protocol!=="https:")return;this.wsState="实时连接中";this.ws=new WebSocket(`${location.origin.replace(/^http/,"ws")}/public/ws`);this.ws.onopen=()=>this.wsState="实时已连接";this.ws.onclose=()=>{this.ws=null;this.wsState="实时已断开";setTimeout(()=>this.connectWs(),5000)};this.ws.onmessage=e=>{if(e.data==="pong")return;try{const msg=JSON.parse(e.data);if(msg.type==="snapshot"){this.settings=msg.data.settings||this.settings;this.servers=msg.data.servers||this.servers;if(this.view==="map")this.$nextTick(this.renderMap)}}catch{}};setInterval(()=>{try{this.ws&&this.ws.send("ping")}catch{}},25000)},
+    async checkMe(){if(!this.token)return;try{await this.api("/api/auth/me");await this.loadAdmin()}catch{this.token="";localStorage.removeItem("probeToken")}},
+    async doLogin(){try{const d=await this.api("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(this.login)});this.token=d.token;localStorage.probeToken=d.token;this.notice("已登录");await this.loadAdmin()}catch(e){this.notice(e.message)}},
+    logout(){this.token="";delete localStorage.probeToken;this.adminServers=[];this.lastCommand="";this.adminOpen=false;this.notice("已退出登录")},
+    async loadAdmin(){if(!this.token)return;this.adminServers=await this.api("/api/servers")},
+    openAdmin(){this.adminOpen=true;this.loadAdmin()},
+    async addServer(){try{const d=await this.api("/api/servers",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(this.newServer)});this.lastCommand=d.install_command;this.newServer={ip:"",name:"",server_group:this.newServer.server_group||"默认分组"};await this.load();await this.loadAdmin();this.notice("已添加探针")}catch(e){this.notice(e.message)}},
+    async removeServer(ip){if(!confirm("确定删除这个探针？"))return;await this.api("/api/servers?ip="+encodeURIComponent(ip),{method:"DELETE"});await this.load();await this.loadAdmin()},
+    async loadCommand(ip){const d=await this.api("/api/install-command?ip="+encodeURIComponent(ip));this.lastCommand=d.command;this.copy(d.command)},
+    async copy(value){await navigator.clipboard.writeText(value);this.notice("已复制")},
+    saveSettingsSoon(){if(!this.isLoggedIn)return;clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>this.api("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({settings:{theme:this.settings.theme}})}).catch(()=>{}),500)},
+    setView(v){this.view=v;localStorage.probeView=v;if(v==="map")this.$nextTick(this.renderMap)},
+    applyTheme(theme){document.body.className=theme||"theme1"},
+    isOnline(s){return Date.now()-Number(s.last_updated||0)<360000},
+    avg(k){const values=this.servers.map(s=>Number(s[k]||0)).filter(n=>Number.isFinite(n));return values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0},
+    num(v){return Number(v||0)},
+    formatBytes(v){let n=Number(v||0),u=["B","KB","MB","GB","TB","PB"],i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return `${n.toFixed(i?1:0)} ${u[i]}`},
+    formatSpeed(v){return this.formatBytes(v)+"/s"},
+    timeAgo(ts){ts=Number(ts||0);if(!ts)return"从未";const s=Math.max(0,Math.floor((Date.now()-ts)/1000));if(s<60)return s+" 秒前";if(s<3600)return Math.floor(s/60)+" 分钟前";if(s<86400)return Math.floor(s/3600)+" 小时前";return Math.floor(s/86400)+" 天前"},
+    async openDetail(id){this.detail=await this.api("/api/probe/detail?id="+encodeURIComponent(id));this.$nextTick(this.renderCharts)},
+    closeDetail(){this.detail=null;this.destroyCharts()},
+    destroyCharts(){this.charts.forEach(c=>c.destroy());this.charts=[]},
+    renderCharts(){this.destroyCharts();const h=JSON.parse(this.detail.history||"{}");const labels=h.time||[];const mk=(id,datasets)=>this.charts.push(new Chart(document.getElementById(id),{type:"line",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{x:{display:false},y:{beginAtZero:true}}}}));mk("chart-main",[{label:"CPU",data:h.cpu||[],borderColor:"#2f7df6",tension:.35},{label:"内存",data:h.ram||[],borderColor:"#10b981",tension:.35}]);mk("chart-net",[{label:"入站",data:h.net_in||[],borderColor:"#6366f1",tension:.35},{label:"出站",data:h.net_out||[],borderColor:"#f59e0b",tension:.35}]);mk("chart-conn",[{label:"TCP",data:h.tcp||[],borderColor:"#ec4899",tension:.35},{label:"UDP",data:h.udp||[],borderColor:"#14b8a6",tension:.35}])},
+    renderMap(){if(!window.L)return;if(!this.map){this.map=L.map("map",{worldCopyJump:true}).setView([24,18],2);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap"}).addTo(this.map)};this.map.eachLayer(l=>{if(l instanceof L.Marker)this.map.removeLayer(l)});const coords={US:[39,-98],JP:[36,138],SG:[1.35,103.8],HK:[22.3,114.2],TW:[23.7,121],KR:[36,128],DE:[51,10],GB:[54,-2],FR:[46,2],NL:[52,5],CA:[56,-106],AU:[-25,133],CN:[35,104]};this.filteredServers.forEach(s=>{const p=coords[(s.country||"").toUpperCase()];if(p)L.marker(p).addTo(this.map).bindPopup(`<b>${s.name}</b><br>${this.isOnline(s)?"在线":"离线"} · CPU ${s.cpu||0}%`)})},
+    notice(t){this.toast=t;setTimeout(()=>this.toast="",2200)}
+  }
+}).mount("#app");
+</script>
+</body>
+</html>
