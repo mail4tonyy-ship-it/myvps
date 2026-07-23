@@ -4,6 +4,9 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-07-15",
   "workers_dev": true,
+  "build": {
+    "command": "node scripts/prepare-cloudflare-deploy.mjs"
+  },
   "vars": {
     "ADMIN_USERNAME": "admin",
     "ADMIN_PASSWORD": "admin"
@@ -16,8 +19,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "myvps000",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_name": "myvps646"
     }
   ],
   "triggers": {

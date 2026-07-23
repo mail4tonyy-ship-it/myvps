@@ -18,6 +18,8 @@ Cloudflare 一键部署会读取 `wrangler.jsonc` 并自动准备以下资源：
 - Durable Objects：`VPS_PRESENCE`、`DASHBOARD_HUB`
 - Worker Assets：`static`
 
+注意：D1 使用 Wrangler 自动创建，不需要手动填写 `database_id`。如果部署页面显示部署命令，保持默认 `npx wrangler deploy` 或使用 `npm run deploy` 均可。
+
 预设登录信息：
 
 ```text
