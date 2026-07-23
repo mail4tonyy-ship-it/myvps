@@ -340,7 +340,7 @@
                                             <div class="probe-stat-subtext stat-subtext">{{ formatBytes(s.disk_used*1048576) }} / {{ formatBytes(s.disk_total*1048576) }}</div>
                                         </div>
                                         <div class="flex justify-between text-[11px] text-gray-500 mt-0.5 item-sysinfo">
-                                            <div class="truncate mr-1 stat-subtext" :title="s.os+' | '+s.arch+' | '+s.virt">{{ s.os || '-' }} | {{ s.arch || '-' }} | {{ s.virt || '-' }}</div>
+                                            <div class="truncate mr-1 stat-subtext" :title="formatSystemStack(s)">{{ formatSystemStack(s) }}</div>
                                             <div class="shrink-0 stat-subtext">TCP/UDP: {{ s.tcp_conn||0 }} / {{ s.udp_conn||0 }}</div>
                                         </div>
                                         <div class="flex justify-between text-[11px] text-gray-500 mt-1 item-speed">
@@ -362,7 +362,7 @@
                                     <td class="text-center"><div class="probe-status-dot status-dot inline-block m-0" :style="{background: isOnline(s.last_updated, s.realtime_state) ? '#10b981' : '#ef4444'}"></div></td>
                                     <td><b class="card-title-text">{{ s.name }}</b></td>
                                     <td><img v-if="s.country && s.country!=='XX'" :src="'https://flagcdn.com/24x18/' + (s.country === 'TW' ? 'cn' : s.country.toLowerCase()) + '.png'"></td>
-                                    <td><span class="text-xs text-gray-500 os-text">{{ s.os||'-' }} / {{ s.arch||'-' }} / {{ s.virt||'-' }}</span></td>
+                                    <td><span class="text-xs text-gray-500 os-text">{{ formatSystemStack(s) }}</span></td>
                                     <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-blue-500" :style="{width: s.cpu+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.cpu||0).toFixed(1) }}%</span></div></td>
                                     <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-emerald-500" :style="{width: s.ram+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.ram||0).toFixed(1) }}%</span></div></td>
                                     <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-emerald-500" :style="{width: s.disk+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.disk||0).toFixed(1) }}%</span></div></td>
@@ -851,6 +851,11 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
 
                 const isOnline = (lastReport, realtimeState = '') => realtimeState ? realtimeState === 'online' : !!lastReport && (Date.now() - lastReport) < 1200000;
                 const formatBytes = (bytes) => { const b = parseInt(bytes); if (isNaN(b) || b === 0) return '0 B'; const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; };
+                const formatSystemStack = (server = {}) => {
+                    const values = [server.os, server.arch, server.virt].map(value => String(value || '').trim()).filter(Boolean);
+                    if (values.length === 0 || (values[0] === '待接入' && values.length === 1)) return '待接入';
+                    return values.join(' / ');
+                };
                 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
                 const formatDate = (ts) => { if (!ts) return '永久'; const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
                 const getExpireText = (dateStr) => { if(!dateStr) return '永久'; const d = new Date(dateStr).getTime(); if(isNaN(d)) return '永久'; const diff = d - Date.now(); return diff > 0 ? Math.ceil(diff/86400000) + '天' : '已过期'; };
@@ -1253,7 +1258,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 return { 
                     isLoggedIn, showLoginModal, loginUser, password, currentUser, role, activeTab, 
                     servers, nodes, users, newVps, newNodeParams, newUser, 
-                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addVps, openServerEdit, saveServerEdit, deleteVps, getNodesByIp, getVpsName, formatBytes, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, copyCommand,
+                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addVps, openServerEdit, saveServerEdit, deleteVps, getNodesByIp, getVpsName, formatBytes, formatSystemStack, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, copyCommand,
                     globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, generateUUIDForNewUser,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, serverEditModalOpen, editingServer, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain, 
