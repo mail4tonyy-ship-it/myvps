@@ -830,6 +830,7 @@
                 const probeView = ref(localStorage.getItem('monitor_preferred_view') || 'card');
                 const probeDetailId = ref(null); const probeDetail = ref({});
                 let probeCharts = {};
+                const probeLiveHistory = {};
                 const currentFilter = ref('all');
 
                 const adminProbeServers = ref([]);
@@ -1103,16 +1104,71 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
 
                 const updateProbeDetailCharts = (data) => {
                     let hist = {}; try { if(data.history) hist = JSON.parse(data.history); } catch(e) {}
-                    if (hist.time && hist.time.length > 0 && probeCharts.cpu) {
-                        const nowTime = new Date(); const timeLabel = nowTime.getHours().toString().padStart(2, '0') + ':' + String(nowTime.getMinutes()).padStart(2, '0');
-                        const rtLabels = [...hist.time, timeLabel];
-                        const updateChartSync = (chart, histArray, rtValue) => { chart.data.labels = rtLabels; chart.data.datasets[0].data = histArray ? [...histArray, rtValue] : []; chart.update('none'); };
-                        const updateMultiChartSync = (chart, histArrays, rtValues) => { chart.data.labels = rtLabels; histArrays.forEach((hArr, i) => { chart.data.datasets[i].data = hArr ? [...hArr, rtValues[i]] : []; }); chart.update('none'); };
-                        updateChartSync(probeCharts.cpu, hist.cpu, parseFloat(data.cpu) || 0); updateChartSync(probeCharts.ram, hist.ram, parseFloat(data.ram) || 0); updateChartSync(probeCharts.proc, hist.proc, parseInt(data.processes) || 0);
-                        updateMultiChartSync(probeCharts.net, [hist.net_in, hist.net_out], [parseFloat(data.net_in_speed) || 0, parseFloat(data.net_out_speed) || 0]);
-                        updateMultiChartSync(probeCharts.conn, [hist.tcp, hist.udp], [parseInt(data.tcp_conn) || 0, parseInt(data.udp_conn) || 0]);
-                        updateMultiChartSync(probeCharts.ping, [hist.ping_ct, hist.ping_cu, hist.ping_cm, hist.ping_bd], [parseInt(data.ping_ct) || 0, parseInt(data.ping_cu) || 0, parseInt(data.ping_cm) || 0, parseInt(data.ping_bd) || 0]);
+                    if (!probeCharts.cpu) return;
+                    const key = normalizeRealtimeKey(data.id || probeDetailId.value || data.ip);
+                    const cache = probeLiveHistory[key] || (probeLiveHistory[key] = { time: [], cpu: [], ram: [], proc: [], net_in: [], net_out: [], tcp: [], udp: [], ping_ct: [], ping_cu: [], ping_cm: [], ping_bd: [], lastTs: 0 });
+                    const sampleTs = Number(data._realtime_ts || data.last_updated || Date.now());
+                    const nowTime = new Date(sampleTs || Date.now());
+                    const timeLabel = nowTime.getHours().toString().padStart(2, '0') + ':' + String(nowTime.getMinutes()).padStart(2, '0');
+                    if (sampleTs && sampleTs !== cache.lastTs) {
+                        const push = (name, value) => { cache[name].push(Number(value) || 0); if (cache[name].length > 180) cache[name].shift(); };
+                        cache.time.push(timeLabel); if (cache.time.length > 180) cache.time.shift();
+                        push('cpu', data.cpu); push('ram', data.ram); push('proc', data.processes);
+                        push('net_in', data.net_in_speed); push('net_out', data.net_out_speed);
+                        push('tcp', data.tcp_conn); push('udp', data.udp_conn);
+                        push('ping_ct', data.ping_ct); push('ping_cu', data.ping_cu); push('ping_cm', data.ping_cm); push('ping_bd', data.ping_bd);
+                        cache.lastTs = sampleTs;
                     }
+                    const asArray = (value) => Array.isArray(value) ? value.map(v => Number(v) || 0) : [];
+                    const baseLabels = Array.isArray(hist.time) ? hist.time : [];
+                    let labels = [...baseLabels, ...cache.time];
+                    if (labels.length === 0) labels = [timeLabel, timeLabel];
+                    else if (labels.length === 1) labels = [labels[0], labels[0]];
+                    const series = (histArray, liveArray, current) => {
+                        let values = [...asArray(histArray), ...asArray(liveArray)];
+                        if (values.length === 0) values = [Number(current) || 0, Number(current) || 0];
+                        else if (values.length === 1) values = [values[0], values[0]];
+                        while (values.length < labels.length) values.unshift(values[0] ?? 0);
+                        if (values.length > labels.length) values = values.slice(values.length - labels.length);
+                        return values;
+                    };
+                    const niceMax = (values, floor = 1) => {
+                        const max = Math.max(floor, ...values.map(v => Number(v) || 0));
+                        const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
+                        return Math.ceil((max * 1.12) / magnitude) * magnitude;
+                    };
+                    const setScale = (chart, values, floor) => {
+                        chart.options.scales.y.suggestedMax = niceMax(values.flat(), floor);
+                    };
+                    const updateChartSync = (chart, values, floor) => {
+                        chart.data.labels = labels;
+                        chart.data.datasets[0].data = values;
+                        setScale(chart, [values], floor);
+                        chart.update('none');
+                    };
+                    const updateMultiChartSync = (chart, valuesList, floor) => {
+                        chart.data.labels = labels;
+                        valuesList.forEach((values, i) => { chart.data.datasets[i].data = values; });
+                        setScale(chart, valuesList, floor);
+                        chart.update('none');
+                    };
+                    const cpuValues = series(hist.cpu, cache.cpu, data.cpu);
+                    const ramValues = series(hist.ram, cache.ram, data.ram);
+                    const procValues = series(hist.proc, cache.proc, data.processes);
+                    const netInValues = series(hist.net_in, cache.net_in, data.net_in_speed);
+                    const netOutValues = series(hist.net_out, cache.net_out, data.net_out_speed);
+                    const tcpValues = series(hist.tcp, cache.tcp, data.tcp_conn);
+                    const udpValues = series(hist.udp, cache.udp, data.udp_conn);
+                    const pingCtValues = series(hist.ping_ct, cache.ping_ct, data.ping_ct);
+                    const pingCuValues = series(hist.ping_cu, cache.ping_cu, data.ping_cu);
+                    const pingCmValues = series(hist.ping_cm, cache.ping_cm, data.ping_cm);
+                    const pingBdValues = series(hist.ping_bd, cache.ping_bd, data.ping_bd);
+                    updateChartSync(probeCharts.cpu, cpuValues, 20);
+                    updateChartSync(probeCharts.ram, ramValues, 30);
+                    updateChartSync(probeCharts.proc, procValues, 20);
+                    updateMultiChartSync(probeCharts.net, [netInValues, netOutValues], 1024);
+                    updateMultiChartSync(probeCharts.conn, [tcpValues, udpValues], 20);
+                    updateMultiChartSync(probeCharts.ping, [pingCtValues, pingCuValues, pingCmValues, pingBdValues], 100);
                 };
 
                 const openProbeDetail = async (id) => { probeDetailId.value = id; await nextTick(); initProbeDetailCharts(); fetchProbeData(true); };
