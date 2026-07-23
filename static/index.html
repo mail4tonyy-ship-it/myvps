@@ -95,7 +95,7 @@
         .probe-header-action.active { background: #fff; color: #3b82f6; box-shadow: 0 1px 4px rgba(15,23,42,.12); }
         .probe-header-return { background: rgba(16,185,129,.12); color: #059669; }
         .probe-header-return:hover { background: rgba(16,185,129,.18); }
-        .probe-filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .probe-filter-bar { display: flex; gap: 10px; margin: -10px 0 20px; flex-wrap: wrap; }
         .probe-filter-tag { display: inline-flex; align-items: center; gap: 5px; background: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor:pointer; border: 1px solid transparent;}
         .probe-filter-tag.active { background: #3b82f6; color: white; }
 
@@ -344,19 +344,19 @@
                 </div>
 
                 <div v-else>
-                    <div class="probe-filter-bar filter-bar">
-                        <span class="probe-filter-tag filter-tag" :class="{active: currentFilter === 'all'}" @click="currentFilter = 'all'">全部 {{ publicProbeServers.length }}</span>
-                        <span v-for="(count, code) in probeCountryStats" :key="code" class="probe-filter-tag filter-tag" :class="{active: currentFilter === code}" @click="currentFilter = code">
-                            <img :src="'https://flagcdn.com/16x12/' + (code === 'TW' ? 'cn' : code.toLowerCase()) + '.png'"> {{ code }} {{ count }}
-                        </span>
-                    </div>
-
                     <div class="probe-global-stats global-stats">
                         <div class="stats-row">
                             <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">服务器总数</div><div class="probe-g-val g-val">{{ publicProbeServers.length }}</div><div class="probe-g-sub g-sub">在线 <span class="text-emerald-500">{{ probeGlobalOnline }}</span> | 离线 <span class="text-red-500">{{ probeGlobalOffline }}</span></div></div>
                             <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">总计流量 (入 | 出) <span v-if="probeSys.auto_reset_traffic==='true'" class="text-[10px] text-orange-600">(按期重置)</span></div><div class="probe-g-val g-val">{{ formatBytes(probeGlobalNetRx) }} | {{ formatBytes(probeGlobalNetTx) }}</div></div>
                             <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">实时网速 (入 | 出)</div><div class="probe-g-val g-val"><span class="text-emerald-500">↓</span> {{ formatBytes(probeGlobalSpeedIn) }}/s | <span class="text-blue-500">↑</span> {{ formatBytes(probeGlobalSpeedOut) }}/s</div></div>
                         </div>
+                    </div>
+
+                    <div class="probe-filter-bar filter-bar">
+                        <span class="probe-filter-tag filter-tag" :class="{active: currentFilter === 'all'}" @click="currentFilter = 'all'">全部 {{ publicProbeServers.length }}</span>
+                        <span v-for="(count, code) in probeCountryStats" :key="code" class="probe-filter-tag filter-tag" :class="{active: currentFilter === code}" @click="currentFilter = code">
+                            <img :src="'https://flagcdn.com/16x12/' + (code === 'TW' ? 'cn' : code.toLowerCase()) + '.png'"> {{ code }} {{ count }}
+                        </span>
                     </div>
 
                     <div v-if="probeView === 'card'">
