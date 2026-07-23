@@ -584,8 +584,8 @@
                 </div>
             </div>
             <div v-if="role === 'admin' && activeTab === 'homeip'" class="homeip-console rounded-[2rem] p-4 md:p-8 space-y-8 overflow-hidden">
-                <div class="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] gap-6 items-stretch">
-                    <div class="flex flex-col gap-5 h-full">
+                <div class="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] gap-6 items-start">
+                    <div class="flex flex-col gap-5">
                         <div>
                             <h2 class="text-4xl md:text-5xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400">Proxy Controller</h2>
                             <div class="mt-4 flex flex-wrap items-center gap-2 text-sm md:text-base font-black homeip-muted">
@@ -593,7 +593,7 @@
                                 <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="text-indigo-300 underline decoration-indigo-500/40 underline-offset-4">/api/proxy/proxies</button>
                             </div>
                         </div>
-                        <div class="homeip-panel rounded-[1.5rem] p-6 flex-1 min-h-[30rem] flex flex-col">
+                        <div class="homeip-panel rounded-[1.5rem] p-6 h-80 flex flex-col">
                             <div class="flex items-center gap-2 mb-5"><span class="text-indigo-300">🌐</span><h3 class="text-xl font-black text-white">全量国家代码库</h3></div>
                             <p class="homeip-muted text-sm font-bold leading-relaxed mb-5">选择目标地区后下发策略，已部署的家宽 Agent 会自动拉取新配置。</p>
                             <div class="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-4 gap-2 flex-1 content-start overflow-y-auto pr-1">
@@ -601,7 +601,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="space-y-4 min-w-0 h-full">
+                    <div class="space-y-4 min-w-0">
                         <div class="homeip-panel rounded-[1.25rem] p-5">
                             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                                 <div>
