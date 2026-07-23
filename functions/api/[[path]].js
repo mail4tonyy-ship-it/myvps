@@ -212,6 +212,33 @@ async function ensureDbSchema(db) {
     return schemaReadyPromise;
 }
 
+async function ensureProbePlaceholder(db, ip, name, country = 'XX') {
+    const safeName = String(name || ip || 'Unnamed').trim().slice(0, 100) || String(ip);
+    const safeCountry = String(country || 'XX').toUpperCase() === 'TW' ? 'CN' : String(country || 'XX').toUpperCase().slice(0, 2);
+    await db.prepare(`
+        INSERT INTO probe_servers (
+            id, name, cpu, ram, disk, load_avg, uptime, last_updated,
+            ram_total, net_rx, net_tx, net_in_speed, net_out_speed,
+            os, cpu_info, arch, boot_time, ram_used, swap_total, swap_used,
+            disk_total, disk_used, processes, tcp_conn, udp_conn,
+            country, ip_v4, ip_v6, server_group, price, expire_date,
+            bandwidth, traffic_limit, ping_ct, ping_cu, ping_cm, ping_bd,
+            monthly_rx, monthly_tx, last_rx, last_tx, reset_month,
+            agent_os, history, is_hidden, virt, reset_day
+        ) VALUES (
+            ?, ?, '0', '0', '0', '0', '等待 Agent 上报', 0,
+            '0', '0', '0', '0', '0',
+            '待接入', '', '', '', '0', '0', '0',
+            '0', '0', '0', '0', '0',
+            ?, '1', '0', '默认分组', '免费', '',
+            '', '', '0', '0', '0', '0',
+            '0', '0', '0', '0', '',
+            'debian', '{}', 'false', '', '1'
+        )
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name
+    `).bind(ip, safeName, safeCountry).run();
+}
+
 async function verifyAuth(authHeader, request, db, env, context) {
     try {
         if (!authHeader || !env.ADMIN_PASSWORD) return null;
@@ -329,26 +356,104 @@ async function handleProbeAPI(request, env, context, pathArray) {
 
     if (method === 'GET' && subPath === 'public') {
         const isAjax = url.searchParams.get('ajax') === '1';
-        const cacheKey = new Request(`${url.origin}/api/probe/public?ajax=${isAjax ? '1' : '0'}`);
-        const cached = await caches.default.match(cacheKey);
-        if (cached) return cached;
-        const settings = { theme: 'theme1', is_public: 'true', site_title: '⚡ Server Monitor Pro', show_price: 'true', show_expire: 'true', show_bw: 'true', show_tf: 'true', custom_css: '', custom_bg: '', custom_head: '', custom_script: '', report_interval: '5', enable_popup: 'false', popup_content: '', cached_nodes_data: '' };
-        try { const { results } = await db.prepare('SELECT * FROM probe_settings').all(); if (results) results.forEach(r => settings[r.key] = r.value); } catch(e){}
         const authHeader = request.headers.get("Authorization");
         const isLoggedIn = await verifyAuth(authHeader, request, db, env, context);
+        const cacheKey = new Request(`${url.origin}/api/probe/public?ajax=${isAjax ? '1' : '0'}`);
+        const cached = null;
+        if (cached) return cached;
+        const settings = { theme: 'theme1', is_public: 'true', site_title: 'MyVps', show_price: 'true', show_expire: 'true', show_bw: 'true', show_tf: 'true', custom_css: '', custom_bg: '', custom_head: '', custom_script: '', report_interval: '5', enable_popup: 'false', popup_content: '', cached_nodes_data: '' };
+        try { const { results } = await db.prepare('SELECT * FROM probe_settings').all(); if (results) results.forEach(r => settings[r.key] = r.value); } catch(e){}
+        if (settings.site_title === 'Server Monitor Pro') {
+            settings.site_title = 'MyVps';
+            await db.prepare('INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind('site_title', 'MyVps').run();
+        }
         if (settings.is_public !== 'true' && !isLoggedIn) return Response.json({ error: "Private Dashboard" }, { status: 401 });
-        const servers = (await db.prepare('SELECT p.id, p.name, p.cpu, p.ram, p.disk, p.load_avg, p.uptime, p.last_updated, p.net_in_speed, p.net_out_speed, p.os, p.arch, p.virt, p.tcp_conn, p.udp_conn, p.country, p.ip_v4, p.ip_v6, p.server_group, p.price, p.expire_date, p.bandwidth, p.traffic_limit, p.ping_ct, p.ping_cu, p.ping_cm, p.ping_bd, p.monthly_rx, p.monthly_tx, p.net_rx, p.net_tx, p.cpu_info, p.ram_used, p.ram_total, p.disk_used, p.disk_total FROM probe_servers p INNER JOIN servers s ON s.ip = p.id WHERE p.is_hidden != "true"').all()).results;
+        const servers = (await db.prepare(`
+            SELECT
+                s.ip AS id,
+                COALESCE(p.name, s.name) AS name,
+                COALESCE(p.cpu, s.cpu, '0') AS cpu,
+                COALESCE(p.ram, s.mem, '0') AS ram,
+                COALESCE(p.disk, s.disk, '0') AS disk,
+                COALESCE(p.load_avg, s.load, '0') AS load_avg,
+                COALESCE(p.uptime, s.uptime, '等待 Agent 上报') AS uptime,
+                COALESCE(p.last_updated, s.last_report, 0) AS last_updated,
+                COALESCE(p.net_in_speed, s.net_in_speed, '0') AS net_in_speed,
+                COALESCE(p.net_out_speed, s.net_out_speed, '0') AS net_out_speed,
+                COALESCE(p.os, '待接入') AS os,
+                COALESCE(p.arch, '') AS arch,
+                COALESCE(p.virt, '') AS virt,
+                COALESCE(p.tcp_conn, s.tcp_conn, '0') AS tcp_conn,
+                COALESCE(p.udp_conn, s.udp_conn, '0') AS udp_conn,
+                COALESCE(p.country, 'XX') AS country,
+                COALESCE(p.ip_v4, '1') AS ip_v4,
+                COALESCE(p.ip_v6, '0') AS ip_v6,
+                COALESCE(p.server_group, '默认分组') AS server_group,
+                COALESCE(p.price, '免费') AS price,
+                COALESCE(p.expire_date, '') AS expire_date,
+                COALESCE(p.bandwidth, '') AS bandwidth,
+                COALESCE(p.traffic_limit, '') AS traffic_limit,
+                COALESCE(p.ping_ct, '0') AS ping_ct,
+                COALESCE(p.ping_cu, '0') AS ping_cu,
+                COALESCE(p.ping_cm, '0') AS ping_cm,
+                COALESCE(p.ping_bd, '0') AS ping_bd,
+                COALESCE(p.monthly_rx, '0') AS monthly_rx,
+                COALESCE(p.monthly_tx, '0') AS monthly_tx,
+                COALESCE(p.net_rx, '0') AS net_rx,
+                COALESCE(p.net_tx, '0') AS net_tx,
+                COALESCE(p.cpu_info, '') AS cpu_info,
+                COALESCE(p.ram_used, '0') AS ram_used,
+                COALESCE(p.ram_total, '0') AS ram_total,
+                COALESCE(p.disk_used, '0') AS disk_used,
+                COALESCE(p.disk_total, '0') AS disk_total
+            FROM servers s
+            LEFT JOIN probe_servers p ON p.id = s.ip
+            WHERE COALESCE(p.is_hidden, 'false') != 'true'
+            ORDER BY s.name COLLATE NOCASE ASC
+        `).all()).results;
         const publicKeys = new Set(['theme', 'is_public', 'site_title', 'show_price', 'show_expire', 'show_bw', 'show_tf', 'custom_css', 'custom_bg', 'custom_head', 'custom_script', 'report_interval', 'enable_popup', 'popup_content', 'cached_nodes_data', 'auto_reset_traffic', 'visits_total', 'visits_today', 'visits_date']);
         for (const key of Object.keys(settings)) if (!publicKeys.has(key)) delete settings[key];
         const realtime = env.REALTIME_URL ? null : await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-        const response = Response.json({ settings, servers, realtime_url: env.REALTIME_URL || realtime?.val || '' }, { headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' } });
-        if (settings.is_public === 'true') context.waitUntil(caches.default.put(cacheKey, response.clone()));
+        const response = Response.json({ settings, servers, realtime_url: env.REALTIME_URL || realtime?.val || '' }, { headers: { 'Cache-Control': 'no-store' } });
         return response;
     }
 
     if (method === 'GET' && subPath === 'detail') {
         const id = url.searchParams.get('id');
-        const server = await db.prepare('SELECT * FROM probe_servers WHERE id = ?').bind(id).first();
+        let server = await db.prepare('SELECT * FROM probe_servers WHERE id = ?').bind(id).first();
+        if (!server) {
+            const base = await db.prepare('SELECT * FROM servers WHERE ip = ?').bind(id).first();
+            if (base) {
+                server = {
+                    id: base.ip,
+                    name: base.name,
+                    cpu: base.cpu || 0,
+                    ram: base.mem || 0,
+                    disk: base.disk || 0,
+                    load_avg: base.load || '0',
+                    uptime: base.uptime || '等待 Agent 上报',
+                    last_updated: base.last_report || 0,
+                    net_in_speed: base.net_in_speed || 0,
+                    net_out_speed: base.net_out_speed || 0,
+                    tcp_conn: base.tcp_conn || 0,
+                    udp_conn: base.udp_conn || 0,
+                    country: 'XX',
+                    ip_v4: '1',
+                    ip_v6: '0',
+                    server_group: '默认分组',
+                    price: '免费',
+                    expire_date: '',
+                    bandwidth: '',
+                    traffic_limit: '',
+                    ping_ct: '0',
+                    ping_cu: '0',
+                    ping_cm: '0',
+                    ping_bd: '0',
+                    history: '{}',
+                    is_hidden: 'false',
+                };
+            }
+        }
         if (!server || server.is_hidden === 'true') return Response.json({ error: "Not found" }, { status: 404 });
         const publicSetting = await db.prepare("SELECT value FROM probe_settings WHERE key = 'is_public'").first();
         if (publicSetting && publicSetting.value !== 'true' && !(await verifyAuth(request.headers.get('Authorization'), request, db, env, context))) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -375,7 +480,27 @@ async function handleProbeAPI(request, env, context, pathArray) {
     if (method === 'GET' && subPath === 'admin/data') {
         const settings = {};
         try { const { results } = await db.prepare('SELECT * FROM probe_settings').all(); if (results) results.forEach(r => settings[r.key] = r.value); } catch(e){}
-        const servers = (await db.prepare('SELECT id, name, last_updated, server_group, price, expire_date, bandwidth, traffic_limit, agent_os, is_hidden, reset_day FROM probe_servers').all()).results;
+        if (settings.site_title === 'Server Monitor Pro') {
+            settings.site_title = 'MyVps';
+            await db.prepare('INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind('site_title', 'MyVps').run();
+        }
+        const servers = (await db.prepare(`
+            SELECT
+                s.ip AS id,
+                COALESCE(p.name, s.name) AS name,
+                COALESCE(p.last_updated, s.last_report, 0) AS last_updated,
+                COALESCE(p.server_group, '默认分组') AS server_group,
+                COALESCE(p.price, '免费') AS price,
+                COALESCE(p.expire_date, '') AS expire_date,
+                COALESCE(p.bandwidth, '') AS bandwidth,
+                COALESCE(p.traffic_limit, '') AS traffic_limit,
+                COALESCE(p.agent_os, 'debian') AS agent_os,
+                COALESCE(p.is_hidden, 'false') AS is_hidden,
+                COALESCE(p.reset_day, '1') AS reset_day
+            FROM servers s
+            LEFT JOIN probe_servers p ON p.id = s.ip
+            ORDER BY s.name COLLATE NOCASE ASC
+        `).all()).results;
         return Response.json({ settings, servers });
     }
     
@@ -405,6 +530,7 @@ async function handleProbeAPI(request, env, context, pathArray) {
 
     if (method === 'PUT' && subPath === 'admin/server') {
         const data = await readJsonBody(request, 16 * 1024);
+        await ensureProbePlaceholder(db, data.id, data.name || data.id, request.cf?.country || 'XX');
         await db.prepare(`UPDATE probe_servers SET name=?, server_group=?, price=?, expire_date=?, bandwidth=?, traffic_limit=?, agent_os=?, is_hidden=?, reset_day=? WHERE id=?`).bind(data.name || 'Unnamed', data.server_group || '默认分组', data.price || '', data.expire_date || '', data.bandwidth || '', data.traffic_limit || '', data.agent_os || 'debian', data.is_hidden || 'false', data.reset_day || '1', data.id).run();
         return Response.json({ success: true });
     }
@@ -618,6 +744,7 @@ export async function onRequest(context) {
 
     if (action === "login" && method === "POST") {
         await ensureDbSchema(db);
+        if (!env.ADMIN_PASSWORD) return Response.json({ error: "ADMIN_PASSWORD is not configured" }, { status: 500 });
         if (!(await loginAllowed(db, request))) return Response.json({ error: "Too many attempts" }, { status: 429, headers: { 'Retry-After': '900' } });
         let credentials;
         try { credentials = await readJsonBody(request, 8 * 1024); } catch { credentials = {}; }
@@ -652,6 +779,7 @@ export async function onRequest(context) {
                         server.agent_token = crypto.randomUUID();
                         await db.prepare("UPDATE servers SET agent_token = ? WHERE ip = ? AND agent_token IS NULL").bind(server.agent_token, server.ip).run();
                     }
+                    await ensureProbePlaceholder(db, server.ip, server.name, request.cf?.country || 'XX');
                 }
             }
             const nodes = [];
@@ -687,7 +815,7 @@ export async function onRequest(context) {
         
         if (action === "vps" && isAdmin) {
             await ensureDbSchema(db);
-            if (method === "POST") { const { ip, name } = await request.json(); const safeIp = String(ip || '').trim(); const safeName = String(name || safeIp).trim().slice(0, 100); if (!/^[0-9A-Fa-f:.]{2,64}$/.test(safeIp)) return Response.json({ error: 'Invalid VPS IP' }, { status: 400 }); if (!safeName) return Response.json({ error: 'Server name is required' }, { status: 400 }); const agentToken = crypto.randomUUID(); const inserted = await db.prepare("INSERT INTO servers (ip, name, alert_sent, agent_token) SELECT ?, ?, 0, ? WHERE (SELECT COUNT(*) FROM servers) < 100 ON CONFLICT(ip) DO NOTHING RETURNING ip").bind(safeIp, safeName, agentToken).first(); if (!inserted) { if (await db.prepare('SELECT ip FROM servers WHERE ip = ?').bind(safeIp).first()) return Response.json({ error: 'VPS already exists' }, { status: 409 }); return Response.json({ error: "当前版本最多管理 100 台 VPS" }, { status: 409 }); } return Response.json({ success: true }); }
+            if (method === "POST") { const { ip, name } = await request.json(); const safeIp = String(ip || '').trim(); const safeName = String(name || safeIp).trim().slice(0, 100); if (!/^[0-9A-Fa-f:.]{2,64}$/.test(safeIp)) return Response.json({ error: 'Invalid VPS IP' }, { status: 400 }); if (!safeName) return Response.json({ error: 'Server name is required' }, { status: 400 }); const agentToken = crypto.randomUUID(); const inserted = await db.prepare("INSERT INTO servers (ip, name, alert_sent, agent_token) SELECT ?, ?, 0, ? WHERE (SELECT COUNT(*) FROM servers) < 100 ON CONFLICT(ip) DO NOTHING RETURNING ip").bind(safeIp, safeName, agentToken).first(); if (!inserted) { if (await db.prepare('SELECT ip FROM servers WHERE ip = ?').bind(safeIp).first()) return Response.json({ error: 'VPS already exists' }, { status: 409 }); return Response.json({ error: "当前版本最多管理 100 台 VPS" }, { status: 409 }); } await ensureProbePlaceholder(db, safeIp, safeName, request.cf?.country || 'XX'); return Response.json({ success: true }); }
             if (method === "PUT") {
                 const { ip, name } = await readJsonBody(request, 8 * 1024);
                 const safeIp = String(ip || '').trim();
