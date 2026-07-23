@@ -523,8 +523,29 @@ export class DashboardHub extends DurableObject {
 
   async snapshot() {
     if (this.snapshotCache && Date.now() - this.snapshotCachedAt < SNAPSHOT_CACHE_MS) return this.snapshotCache;
-    const servers = (await this.env.DB.prepare("SELECT ip, cpu, mem, disk, load, uptime, net_in_speed, net_out_speed, tcp_conn, udp_conn, last_report FROM servers").all()).results || [];
-        const snapshots = await Promise.all(servers.slice(0, 100).map(async row => {
+    const servers = (await this.env.DB.prepare(`
+      SELECT
+        s.ip,
+        COALESCE(p.cpu, s.cpu, 0) AS cpu,
+        COALESCE(p.ram, s.mem, 0) AS mem,
+        COALESCE(p.disk, s.disk, 0) AS disk,
+        COALESCE(p.load_avg, s.load, '') AS load,
+        COALESCE(p.uptime, s.uptime, '') AS uptime,
+        COALESCE(p.net_in_speed, s.net_in_speed, 0) AS net_in_speed,
+        COALESCE(p.net_out_speed, s.net_out_speed, 0) AS net_out_speed,
+        COALESCE(p.tcp_conn, s.tcp_conn, 0) AS tcp_conn,
+        COALESCE(p.udp_conn, s.udp_conn, 0) AS udp_conn,
+        COALESCE(p.ping_ct, 0) AS ping_ct,
+        COALESCE(p.ping_cu, 0) AS ping_cu,
+        COALESCE(p.ping_cm, 0) AS ping_cm,
+        COALESCE(p.ping_bd, 0) AS ping_bd,
+        COALESCE(p.os, '') AS os,
+        COALESCE(p.arch, '') AS arch,
+        COALESCE(p.last_updated, s.last_report, 0) AS last_report
+      FROM servers s
+      LEFT JOIN probe_servers p ON p.id = s.ip
+    `).all()).results || [];
+    const snapshots = await Promise.all(servers.slice(0, 100).map(async row => {
       const { ip } = row;
       const name = await presenceName(ip, this.env);
       if (!name) return null;
@@ -535,7 +556,7 @@ export class DashboardHub extends DurableObject {
       return {
         ip,
         transport: "http",
-        core: { cpu: row.cpu, mem: row.mem, disk: row.disk, load: row.load, uptime: row.uptime, net_in_speed: row.net_in_speed, net_out_speed: row.net_out_speed, tcp_conn: row.tcp_conn, udp_conn: row.udp_conn },
+        core: { cpu: row.cpu, mem: row.mem, disk: row.disk, load: row.load, uptime: row.uptime, net_in_speed: row.net_in_speed, net_out_speed: row.net_out_speed, tcp_conn: row.tcp_conn, udp_conn: row.udp_conn, ping_ct: row.ping_ct, ping_cu: row.ping_cu, ping_cm: row.ping_cm, ping_bd: row.ping_bd, os: row.os, arch: row.arch },
         core_last_seen: row.last_report || 0,
         core_state: Date.now() - (row.last_report || 0) < 360000 ? "online" : Date.now() - (row.last_report || 0) < 1200000 ? "stale" : "offline",
         updated_at: row.last_report || 0,
