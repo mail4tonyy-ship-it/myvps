@@ -188,6 +188,21 @@ async function initializeDbSchema(db) {
     try { await db.prepare("SELECT agent_token FROM servers LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE servers ADD COLUMN agent_token TEXT").run(); } catch(err){} }
     try { await db.prepare("SELECT last_report_id FROM probe_servers LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE probe_servers ADD COLUMN last_report_id TEXT DEFAULT ''").run(); } catch(err){} }
     try { await db.prepare("SELECT applied FROM report_receipts LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE report_receipts ADD COLUMN applied INTEGER DEFAULT 1").run(); } catch(err){} }
+    const probeServerColumns = [
+        ['cpu', "TEXT DEFAULT '0'"], ['ram', "TEXT DEFAULT '0'"], ['disk', "TEXT DEFAULT '0'"], ['load_avg', "TEXT DEFAULT '0'"], ['uptime', "TEXT DEFAULT ''"], ['last_updated', 'INTEGER DEFAULT 0'],
+        ['ram_total', "TEXT DEFAULT '0'"], ['net_rx', "TEXT DEFAULT '0'"], ['net_tx', "TEXT DEFAULT '0'"], ['net_in_speed', "TEXT DEFAULT '0'"], ['net_out_speed', "TEXT DEFAULT '0'"],
+        ['os', "TEXT DEFAULT ''"], ['cpu_info', "TEXT DEFAULT ''"], ['arch', "TEXT DEFAULT ''"], ['boot_time', "TEXT DEFAULT ''"], ['ram_used', "TEXT DEFAULT '0'"],
+        ['swap_total', "TEXT DEFAULT '0'"], ['swap_used', "TEXT DEFAULT '0'"], ['disk_total', "TEXT DEFAULT '0'"], ['disk_used', "TEXT DEFAULT '0'"], ['processes', "TEXT DEFAULT '0'"],
+        ['tcp_conn', "TEXT DEFAULT '0'"], ['udp_conn', "TEXT DEFAULT '0'"], ['country', "TEXT DEFAULT 'XX'"], ['ip_v4', "TEXT DEFAULT '1'"], ['ip_v6', "TEXT DEFAULT '0'"],
+        ['server_group', "TEXT DEFAULT '默认分组'"], ['price', "TEXT DEFAULT '免费'"], ['expire_date', "TEXT DEFAULT ''"], ['bandwidth', "TEXT DEFAULT ''"], ['traffic_limit', "TEXT DEFAULT ''"],
+        ['agent_os', "TEXT DEFAULT 'debian'"], ['ping_ct', "TEXT DEFAULT '0'"], ['ping_cu', "TEXT DEFAULT '0'"], ['ping_cm', "TEXT DEFAULT '0'"], ['ping_bd', "TEXT DEFAULT '0'"],
+        ['monthly_rx', "TEXT DEFAULT '0'"], ['monthly_tx', "TEXT DEFAULT '0'"], ['last_rx', "TEXT DEFAULT '0'"], ['last_tx', "TEXT DEFAULT '0'"], ['reset_month', "TEXT DEFAULT ''"],
+        ['history', "TEXT DEFAULT '{}'"], ['is_hidden', "TEXT DEFAULT 'false'"], ['virt', "TEXT DEFAULT ''"], ['reset_day', "TEXT DEFAULT '1'"], ['last_report_id', "TEXT DEFAULT ''"],
+    ];
+    for (const [name, definition] of probeServerColumns) {
+        try { await db.prepare(`SELECT ${name} FROM probe_servers LIMIT 1`).first(); }
+        catch (e) { try { await db.prepare(`ALTER TABLE probe_servers ADD COLUMN ${name} ${definition}`).run(); } catch(err){} }
+    }
 
     // 初始化云端测速数据
     const checkNodes = await db.prepare("SELECT value FROM probe_settings WHERE key = 'cached_nodes_data'").first();
@@ -739,7 +754,18 @@ export async function onRequest(context) {
         const machineNodes = [];
         const serverAuth = await db.prepare("SELECT agent_token FROM servers WHERE ip = ?").bind(ip).first();
         const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-        return Response.json({ success: true, configs: machineNodes, agent_token: serverAuth && serverAuth.agent_token || '', realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
+        const policy = { report_interval: '5', ping_ct: 'default', ping_cu: 'default', ping_cm: 'default', ping_bd: 'default' };
+        try {
+            const { results } = await db.prepare("SELECT key, value FROM probe_settings WHERE key IN ('report_interval', 'ping_node_ct', 'ping_node_cu', 'ping_node_cm', 'ping_node_bd')").all();
+            for (const row of results || []) {
+                if (row.key === 'report_interval') policy.report_interval = row.value;
+                if (row.key === 'ping_node_ct') policy.ping_ct = row.value;
+                if (row.key === 'ping_node_cu') policy.ping_cu = row.value;
+                if (row.key === 'ping_node_cm') policy.ping_cm = row.value;
+                if (row.key === 'ping_node_bd') policy.ping_bd = row.value;
+            }
+        } catch(e) {}
+        return Response.json({ success: true, configs: machineNodes, agent_token: serverAuth && serverAuth.agent_token || '', realtime_url: env.REALTIME_URL || realtime && realtime.val || '', ...policy });
     }
     if (action === "sub") return new Response("Not Found", { status: 404 });
 
@@ -771,9 +797,50 @@ export async function onRequest(context) {
 
     try {
         if (action === "data") {
-            const servers = isAdmin
-                ? (await db.prepare("SELECT * FROM servers").all()).results
-                : (await db.prepare("SELECT ip, name, cpu, mem, last_report, disk, load, uptime, net_in_speed, net_out_speed, tcp_conn, udp_conn FROM servers").all()).results;
+            const rawServers = isAdmin
+                ? ((await db.prepare("SELECT * FROM servers ORDER BY name COLLATE NOCASE ASC").all()).results || [])
+                : ((await db.prepare("SELECT ip, name, cpu, mem, last_report, disk, load, uptime, net_in_speed, net_out_speed, tcp_conn, udp_conn FROM servers ORDER BY name COLLATE NOCASE ASC").all()).results || []);
+            const probeRows = (await db.prepare("SELECT * FROM probe_servers").all()).results || [];
+            const probeByIp = new Map(probeRows.map(row => [row.id, row]));
+            const servers = rawServers.map(server => {
+                const probe = probeByIp.get(server.ip) || {};
+                return {
+                    ...server,
+                    name: probe.name || server.name,
+                    cpu: probe.cpu ?? server.cpu ?? 0,
+                    mem: probe.ram ?? server.mem ?? 0,
+                    disk: probe.disk ?? server.disk ?? 0,
+                    load: probe.load_avg ?? server.load ?? '',
+                    uptime: probe.uptime ?? server.uptime ?? '',
+                    last_report: probe.last_updated ?? server.last_report ?? 0,
+                    net_in_speed: probe.net_in_speed ?? server.net_in_speed ?? 0,
+                    net_out_speed: probe.net_out_speed ?? server.net_out_speed ?? 0,
+                    tcp_conn: probe.tcp_conn ?? server.tcp_conn ?? 0,
+                    udp_conn: probe.udp_conn ?? server.udp_conn ?? 0,
+                    net_rx: probe.net_rx ?? 0,
+                    net_tx: probe.net_tx ?? 0,
+                    monthly_rx: probe.monthly_rx ?? 0,
+                    monthly_tx: probe.monthly_tx ?? 0,
+                    os: probe.os || '待接入',
+                    arch: probe.arch || '',
+                    virt: probe.virt || '',
+                    cpu_info: probe.cpu_info || '',
+                    ram_used: probe.ram_used ?? 0,
+                    ram_total: probe.ram_total ?? 0,
+                    disk_used: probe.disk_used ?? 0,
+                    disk_total: probe.disk_total ?? 0,
+                    country: probe.country || 'XX',
+                    ping_ct: probe.ping_ct ?? 0,
+                    ping_cu: probe.ping_cu ?? 0,
+                    ping_cm: probe.ping_cm ?? 0,
+                    ping_bd: probe.ping_bd ?? 0,
+                    server_group: probe.server_group || '默认分组',
+                    price: probe.price || '免费',
+                    expire_date: probe.expire_date || '',
+                    bandwidth: probe.bandwidth || '',
+                    traffic_limit: probe.traffic_limit || '',
+                };
+            });
             if (isAdmin) {
                 for (const server of servers) {
                     if (!server.agent_token) {
