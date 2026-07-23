@@ -3,12 +3,15 @@
 import json
 import os
 import platform
+import socket
+import ssl
 import subprocess
 import time
 import urllib.request
 
 APP_DIR = "/opt/probe-panorama"
 CONF_FILE = os.path.join(APP_DIR, "config.json")
+AGENT_VERSION = "1.3.0"
 
 with open(CONF_FILE, "r", encoding="utf-8") as config_file:
     CONF = json.load(config_file)
@@ -19,10 +22,15 @@ TOKEN = CONF["token"]
 HEADERS = {
     "Content-Type": "application/json",
     "Authorization": TOKEN,
-    "User-Agent": "Probe-Panorama-Agent/1.0"
+    "User-Agent": f"Probe-Panorama-Agent/{AGENT_VERSION}"
 }
 
 last_net = None
+runtime_config = {
+    "ping_targets": "",
+    "port_checks": "",
+    "ssl_domains": ""
+}
 
 def read_file(path, default=""):
     try:
@@ -125,6 +133,53 @@ def public_ips():
     ip_v6 = run("curl -6 -fsS --max-time 4 https://api64.ipify.org")
     return ip_v4, ip_v6
 
+def ping_targets():
+    result = {}
+    targets = [item.strip() for item in runtime_config.get("ping_targets", "").split(",") if item.strip()][:8]
+    for target in targets:
+        output = run(f"ping -c 1 -W 2 {target}", timeout=4)
+        marker = "time="
+        if marker in output:
+            value = output.split(marker, 1)[1].split()[0]
+            result[target] = {"ok": True, "ms": float(value)}
+        else:
+            result[target] = {"ok": False}
+    return result
+
+def check_ports():
+    result = {}
+    items = [item.strip() for item in runtime_config.get("port_checks", "").replace("，", ",").split(",") if item.strip()][:20]
+    host = "127.0.0.1"
+    for item in items:
+        target_host = host
+        target_port = item
+        if ":" in item:
+            target_host, target_port = item.rsplit(":", 1)
+        try:
+            port = int(target_port)
+            with socket.create_connection((target_host, port), timeout=2):
+                result[item] = {"ok": True}
+        except Exception:
+            result[item] = {"ok": False}
+    return result
+
+def check_ssl_domains():
+    result = {}
+    domains = [item.strip() for item in runtime_config.get("ssl_domains", "").replace("，", ",").split(",") if item.strip()][:10]
+    context = ssl.create_default_context()
+    for domain in domains:
+      try:
+          with socket.create_connection((domain, 443), timeout=4) as sock:
+              with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                  cert = ssock.getpeercert()
+          expires = cert.get("notAfter", "")
+          expires_ts = time.mktime(time.strptime(expires, "%b %d %H:%M:%S %Y %Z"))
+          days_left = int((expires_ts - time.time()) / 86400)
+          result[domain] = {"ok": True, "expires_at": int(expires_ts * 1000), "expires_date": time.strftime("%Y-%m-%d", time.gmtime(expires_ts)), "days_left": days_left}
+      except Exception as exc:
+          result[domain] = {"ok": False, "error": str(exc)[:120]}
+    return result
+
 def uptime_text():
     seconds = int(float(read_file("/proc/uptime", "0").split()[0]))
     days, rem = divmod(seconds, 86400)
@@ -150,6 +205,7 @@ def collect():
     virt = run("systemd-detect-virt 2>/dev/null || true") or "unknown"
     payload = {
         "ip": VPS_IP,
+        "agent_version": AGENT_VERSION,
         "cpu": cpu_percent(),
         "load": " ".join(load),
         "uptime": uptime_text(),
@@ -163,6 +219,9 @@ def collect():
         "ip_v4": ip_v4,
         "ip_v6": ip_v6,
         "virt": virt,
+        "ping_result": ping_targets(),
+        "port_result": check_ports(),
+        "ssl_result": check_ssl_domains(),
         **mem,
         **disk,
         **net
@@ -175,10 +234,17 @@ def main():
         try:
             response = post_json("/api/report", collect())
             interval = int(response.get("interval") or interval)
+            runtime_config["ping_targets"] = response.get("ping_targets", runtime_config.get("ping_targets", ""))
+            runtime_config["port_checks"] = response.get("port_checks", runtime_config.get("port_checks", ""))
+            runtime_config["ssl_domains"] = response.get("ssl_domains", runtime_config.get("ssl_domains", ""))
         except Exception as exc:
             print("[probe-agent] report failed:", exc, flush=True)
             try:
-                interval = int(get_json(f"/api/config?ip={VPS_IP}").get("interval") or interval)
+                config = get_json(f"/api/config?ip={VPS_IP}")
+                interval = int(config.get("interval") or interval)
+                runtime_config["ping_targets"] = config.get("ping_targets", runtime_config.get("ping_targets", ""))
+                runtime_config["port_checks"] = config.get("port_checks", runtime_config.get("port_checks", ""))
+                runtime_config["ssl_domains"] = config.get("ssl_domains", runtime_config.get("ssl_domains", ""))
             except Exception:
                 pass
         time.sleep(max(15, min(interval, 300)))
