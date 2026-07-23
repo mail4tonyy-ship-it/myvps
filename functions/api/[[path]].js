@@ -16,6 +16,7 @@ async function hmacHex(secret, message) {
 
 function bytesEqual(left, right) { if (left.length !== right.length) return false; let diff = 0; for (let i = 0; i < left.length; i++) diff |= left[i] ^ right[i]; return diff === 0; }
 function base64Bytes(bytes) { let output = ''; for (const byte of bytes) output += String.fromCharCode(byte); return btoa(output); }
+function base64Text(text) { return base64Bytes(new TextEncoder().encode(text)); }
 function decodeBase64Bytes(value) { const binary = atob(value); return Uint8Array.from(binary, char => char.charCodeAt(0)); }
 async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16)), iterations = 210000) { const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']); const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256); return `pbkdf2$${iterations}$${base64Bytes(salt)}$${base64Bytes(new Uint8Array(bits))}`; }
 async function passwordMatches(password, stored) { try { if (/^[0-9a-f]{64}$/i.test(stored || '')) return bytesEqual(new TextEncoder().encode(await sha256(password)), new TextEncoder().encode(stored.toLowerCase())); const [kind, rawIterations, rawSalt, rawHash] = String(stored || '').split('$'); if (kind !== 'pbkdf2') return false; const iterations = Number(rawIterations); if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) return false; const salt = decodeBase64Bytes(rawSalt); const expected = decodeBase64Bytes(rawHash); const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']); const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, expected.byteLength * 8); return bytesEqual(new Uint8Array(bits), expected); } catch { return false; } }
@@ -654,7 +655,8 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
     }
 
     if (subPath === 'proxies' && method === 'GET') {
-        if (!proxyReady) return new Response('PROXY_USER and PROXY_PASS must be configured', { status: 503, headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
+        const format = (url.searchParams.get('format') || 'base64').toLowerCase();
+        if (!proxyReady) return new Response(format === 'raw' ? '# MyVps: PROXY_USER and PROXY_PASS must be configured\n' : '', { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
         const cutoff = Date.now() - 1800000;
         const { results } = await db.prepare('SELECT ip, details FROM proxy_ctrl_servers WHERE last_seen >= ?').bind(cutoff).all();
         const list = [];
@@ -662,9 +664,15 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
             let details = [];
             try { details = JSON.parse(server.details || '[]'); } catch(e) {}
             const node = details.find(item => item.active) || details[0];
-            if (node?.port) list.push(`socks5://${proxyUser}:${proxyPass}@${server.ip}:${node.port}#${node.country || 'HOME'}_${node.node_ip || server.ip}`);
+            if (node?.port) {
+                const user = encodeURIComponent(proxyUser);
+                const pass = encodeURIComponent(proxyPass);
+                const name = encodeURIComponent(`${node.country || 'HOME'}_${node.node_ip || server.ip}`);
+                list.push(`socks5://${user}:${pass}@${server.ip}:${node.port}#${name}`);
+            }
         }
-        return new Response(list.join('\n'), { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
+        const body = list.join('\n');
+        return new Response(format === 'raw' ? body : base64Text(body), { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
     }
 
     return new Response('Not Found', { status: 404 });
