@@ -600,7 +600,7 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
     await ensureDbSchema(db);
     const proxyUser = env.PROXY_USER || '';
     const proxyPass = env.PROXY_PASS || '';
-    if (!proxyUser || !proxyPass) return Response.json({ error: 'PROXY_USER and PROXY_PASS must be configured' }, { status: 503 });
+    const proxyReady = !!(proxyUser && proxyPass);
 
     if (subPath === 'config') {
         if (method === 'GET') {
@@ -611,7 +611,7 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
             if (globalRow?.value) { try { slotMap = { ...slotMap, ...JSON.parse(globalRow.value) }; } catch(e) {} }
             const rawCountry = String(slotMap["0"] || slotMap.country || "JP").toUpperCase().slice(0, 2);
             const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-            return Response.json({ ...slotMap, "0": rawCountry, country: rawCountry, port: Number(slotMap.port) || 7920, switch_trigger: slotMap.switch_trigger || 0, proxy: { enabled: slotMap.enabled !== false, port: Number(slotMap.port) || 7920, user: proxyUser, pass: proxyPass, country: rawCountry }, realtime_url: env.REALTIME_URL || realtime?.val || '' }, { headers: { 'Cache-Control': 'no-store' } });
+            return Response.json({ ...slotMap, "0": rawCountry, country: rawCountry, port: Number(slotMap.port) || 7920, switch_trigger: slotMap.switch_trigger || 0, proxy_ready: proxyReady, proxy: { enabled: proxyReady && slotMap.enabled !== false, port: Number(slotMap.port) || 7920, user: proxyUser, pass: proxyPass, country: rawCountry }, realtime_url: env.REALTIME_URL || realtime?.val || '' }, { headers: { 'Cache-Control': 'no-store' } });
         }
         if (method === 'POST') {
             const data = await readJsonBody(request, 16 * 1024);
@@ -623,7 +623,7 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
             const sanitized = { ...existing, "0": rawCountry, country: rawCountry, port: Math.min(65535, Math.max(1, Number(data.port) || 7920)), enabled: data.enabled !== false };
             if (data.switch_trigger) sanitized.switch_trigger = data.switch_trigger;
             await db.prepare("INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(configKey, JSON.stringify(sanitized)).run();
-            return Response.json({ success: true, slot_map: sanitized, proxy: { enabled: sanitized.enabled, port: sanitized.port, user: proxyUser, pass: proxyPass, country: rawCountry } }, { headers: { 'Cache-Control': 'no-store' } });
+            return Response.json({ success: true, proxy_ready: proxyReady, slot_map: sanitized, proxy: { enabled: proxyReady && sanitized.enabled, port: sanitized.port, user: proxyUser, pass: proxyPass, country: rawCountry } }, { headers: { 'Cache-Control': 'no-store' } });
         }
     }
 
@@ -654,6 +654,7 @@ async function handleProxyAPI(request, env, context, subPath, reportBody = null)
     }
 
     if (subPath === 'proxies' && method === 'GET') {
+        if (!proxyReady) return new Response('PROXY_USER and PROXY_PASS must be configured', { status: 503, headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
         const cutoff = Date.now() - 1800000;
         const { results } = await db.prepare('SELECT ip, details FROM proxy_ctrl_servers WHERE last_seen >= ?').bind(cutoff).all();
         const list = [];
