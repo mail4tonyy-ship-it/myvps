@@ -1,0 +1,31 @@
+{
+  "name": "myvps-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/prepare-cloudflare-deploy.mjs && wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "MyVps 用于保存服务器、登录会话、监控历史、探针展示配置的 D1 数据库。一键部署时会按项目名自动生成名称，例如 `myvps123`。"
+      },
+      "ADMIN_USERNAME": {
+        "description": "管理员账号，默认 `admin`。"
+      },
+      "ADMIN_PASSWORD": {
+        "description": "管理员密码。生产环境请改成强密码，部署后也可在 Cloudflare Variables and Secrets 中覆盖。"
+      },
+      "VPS_PRESENCE": {
+        "description": "MyVps 服务器实时状态 Durable Object。"
+      },
+      "DASHBOARD_HUB": {
+        "description": "MyVps 前台和后台 WebSocket 推送 Durable Object。"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.110.0"
+  }
+}
