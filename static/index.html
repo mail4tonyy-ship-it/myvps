@@ -614,7 +614,10 @@
                                 <div class="homeip-panel rounded-xl p-3"><div class="homeip-muted text-xs font-black">服务</div><div class="mt-1 text-slate-200 font-black text-sm">proxy-lite</div></div>
                                 <div class="homeip-panel rounded-xl p-3"><div class="homeip-muted text-xs font-black">监控</div><div class="mt-1 text-slate-200 font-black text-sm">不覆盖</div></div>
                                 <div class="homeip-panel rounded-xl p-3"><div class="homeip-muted text-xs font-black">权限</div><div class="mt-1 text-indigo-200 font-black text-sm">Root 执行</div></div>
-                                <div class="homeip-panel rounded-xl p-3"><div class="homeip-muted text-xs font-black">凭证</div><div class="mt-1 text-amber-300 font-black text-sm">{{ homeIpProxyReady ? '已读取' : '缺少' }}</div></div>
+                                <div class="homeip-panel rounded-xl p-3"><div class="homeip-muted text-xs font-black">凭证</div><div class="mt-1 font-black text-sm" :class="homeIpProxyReady ? 'text-emerald-300' : 'text-amber-300'">{{ homeIpProxyReady ? '已配置' : '未配置' }}</div></div>
+                            </div>
+                            <div v-if="!homeIpProxyReady" class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs font-bold text-amber-200">
+                                订阅节点需要先在 Cloudflare 环境变量配置 PROXY_USER 和 PROXY_PASS，保存后重新部署。
                             </div>
                             <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
                                 <select v-model="homeIpTarget" class="w-full bg-slate-900/80 border border-slate-700 p-3 rounded-xl text-sm font-black text-slate-100">
@@ -625,9 +628,9 @@
                             </div>
                             <div class="mt-4 pt-4 border-t border-slate-700/70">
                                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-                                    <div><h3 class="text-base font-black text-white">订阅链接生成</h3><p class="homeip-muted text-xs font-bold mt-1">默认输出 Base64 节点订阅，兼容常见客户端。</p></div>
+                                    <div><h3 class="text-base font-black text-white">订阅链接生成</h3><p class="homeip-muted text-xs font-bold mt-1">默认输出 Clash YAML，明文可追加 format=raw。</p></div>
                                     <div class="flex flex-wrap gap-2">
-                                        <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-black">复制订阅</button>
+                                        <button @click="homeIpProxyReady ? copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制') : alert('请先在 Cloudflare 环境变量配置 PROXY_USER / PROXY_PASS')" :class="homeIpProxyReady ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'homeip-chip text-amber-200'" class="px-4 py-2 rounded-lg text-xs font-black">复制订阅</button>
                                         <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">重新生成</button>
                                     </div>
                                 </div>
