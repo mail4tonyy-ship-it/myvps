@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>MyVps Server Monitor</title>
+    
+    <script src="https://unpkg.com/vue@3.5.17/dist/vue.global.prod.js"></script>
+    <script>
+        if (!window.Vue) document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3.5.17/dist/vue.global.prod.js"><\/script>');
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        [v-cloak] { display: none !important; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(107, 114, 128, 0.8); }
+        input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4); }
+
+        /* ================= 探针前台大盘核心样式 ================= */
+        .probe-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: transparent; color: #333; margin: 0; padding: 12px; transition: all 0.3s; min-height: 100vh;}
+        @media (min-width: 640px) { .probe-body { padding: 20px; } }
+        /* Keep the default surface, but let dynamically loaded themes paint the page background. */
+        body.theme1 .probe-body { background-color: #f4f5f7; }
+        
+        .probe-container { max-width: 1200px; margin: 0 auto; padding: 0 4px; }
+        @media (min-width: 640px) { .probe-container { padding: 0; } }
+        .probe-global-stats { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-around; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); margin-bottom: 30px; text-align: center; }
+        .probe-g-item { flex: 1; min-width: 200px; }
+        .probe-g-val { font-size: 24px; font-weight: bold; color: #111; margin: 8px 0; }
+        .probe-g-label { font-size: 13px; color: #666; }
+        .probe-g-sub { font-size: 12px; color: #999; }
+        .probe-group-header { font-size: 18px; font-weight: 600; color: #444; margin: 25px 0 15px 5px; border-left: 4px solid #3b82f6; padding-left: 10px; }
+         .probe-grid-container { display: grid; grid-template-columns: 1fr; gap: 15px; }
+         @media (min-width: 640px) { .probe-grid-container { grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); } }
+        
+         .probe-vps-card { display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; background: white; padding: 18px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-decoration: none; color: inherit; border: 1px solid transparent; transition: all 0.2s ease; cursor: pointer;}
+         @media (min-width: 640px) { .probe-vps-card { flex-direction: row; } }
+        .probe-vps-card:hover { border-color: #e5e7eb; transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.08); }
+         .probe-card-left { flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+         @media (min-width: 640px) { .probe-card-left { flex: 0 0 180px; } }
+        .probe-card-title { display: flex; align-items: center; margin-bottom: 4px; font-weight: 600; }
+        .probe-status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex-shrink:0; }
+        .probe-card-meta { font-size: 12px; color: #6b7280; margin-bottom: 3px; }
+        .probe-card-badges { margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
+        .probe-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; color: white; }
+        .probe-badge-bw { background: #3b82f6; } .probe-badge-tf { background: #10b981; } .probe-badge-v4 { background: #a855f7; } .probe-badge-v6 { background: #ec4899; }
+        .probe-ping-box { font-size:11px; margin-top:10px; display:flex; gap:10px; padding: 6px 8px; border-radius: 4px; flex-wrap:wrap; background: rgba(150,150,150,0.1); border: 1px solid rgba(150,150,150,0.2); }
+        
+         .probe-card-right { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-left: 0; border-left: none; min-width: 0; border-top: 1px solid rgba(150,150,150,0.1); }
+         @media (min-width: 640px) { .probe-card-right { padding-left: 15px; border-left: 1px solid rgba(150,150,150,0.1); border-top: none; } }
+        .probe-stat-group { display: flex; flex-direction: column; margin-bottom: 8px; }
+        .probe-stat-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: inherit; }
+        .probe-stat-bar-full { width: 100%; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+        .probe-stat-bar-full > div { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .probe-stat-subtext { font-size: 11px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Table View */
+        .probe-custom-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .probe-custom-table th { background: #f8fafc; padding: 14px 16px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+        .probe-custom-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .probe-custom-table tr:hover { background: #f8fafc; cursor: pointer;}
+        
+        /* Toggle & Filter */
+        .probe-view-controls { display: flex; gap: 8px; background: rgba(0,0,0,0.05); padding: 4px; border-radius: 8px; }
+        .probe-toggle-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border: none; background: transparent; cursor: pointer; border-radius: 6px; font-size: 13px; font-weight: 600; color: #64748b; transition: all 0.2s; }
+        .probe-toggle-btn.active { background: white; color: #3b82f6; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .probe-filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .probe-filter-tag { display: inline-flex; align-items: center; gap: 5px; background: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor:pointer; border: 1px solid transparent;}
+        .probe-filter-tag.active { background: #3b82f6; color: white; }
+
+        /* Map */
+         #map-container { width: 100%; height: 500px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; border: 1px solid #e5e7eb; background-color: #b1c2d4; background-image: linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px); background-size: 20px 20px; z-index: 1;}
+         @media (max-width: 640px) { #map-container { height: 300px; } }
+        .probe-custom-map-badge div { background-color: #10b981; color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+
+        /* Detail View */
+        .probe-header-card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .probe-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; font-size: 14px; }
+         .probe-charts-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+         @media (min-width: 768px) { .probe-charts-grid { grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); } }
+        .probe-chart-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .probe-chart-card canvas { max-height: 150px; }
+        .probe-chart-full { grid-column: 1 / -1; }
+        .probe-chart-full canvas { max-height: 250px !important; }
+
+        /* 主题支持 */
+        .theme2 { background-color: #0d1117; color: #c9d1d9; }
+        .theme2 .probe-vps-card, .theme2 .probe-global-stats, .theme2 .probe-header-card, .theme2 .probe-chart-card { background: #161b22; color: #c9d1d9; box-shadow: 0 4px 6px rgba(0,0,0,0.4); border: 1px solid #30363d; }
+        .theme2 .probe-vps-card:hover { border-color: #8b949e; }
+        .theme2 .probe-group-header { color: #58a6ff; border-left-color: #58a6ff; }
+        .theme2 .probe-g-val, .theme2 .probe-card-title { color: #fff; }
+        .theme2 .probe-g-label, .theme2 .probe-g-sub, .theme2 .probe-card-meta { color: #8b949e; }
+        .theme2 .probe-stat-bar-full { background: #21262d; }
+        .theme2 .probe-view-controls { background: #0d1117; border: 1px solid #30363d; }
+        .theme2 .probe-toggle-btn { color: #8b949e; } .theme2 .probe-toggle-btn.active { background: #21262d; color: #58a6ff; border: 1px solid #30363d; }
+        .theme2 .probe-custom-table, .theme2 .probe-filter-tag { background: #161b22; color: #c9d1d9; border: 1px solid #30363d; }
+        .theme2 .probe-custom-table th { background: #0d1117; color: #8b949e; border-bottom-color: #30363d; }
+        .theme2 .probe-custom-table td { border-bottom-color: #30363d; } .theme2 .probe-custom-table tr:hover { background: #21262d; }
+        .theme2 .probe-stat-subtext { color: rgba(255,255,255,0.6); }
+        .theme2 #map-container { background-color: #0d1117; border-color: #30363d; background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); }
+
+        .theme3 { background-color: #fef08a; color: #000; font-weight: 500; }
+        .theme3 .probe-vps-card, .theme3 .probe-global-stats, .theme3 .probe-header-card, .theme3 .probe-chart-card { background: #fff; border: 3px solid #000; border-radius: 0; box-shadow: 6px 6px 0px #000; transition: transform 0.1s, box-shadow 0.1s; }
+        .theme3 .probe-vps-card:hover { transform: translate(2px, 2px); box-shadow: 4px 4px 0px #000; border-color: #000; }
+        .theme3 .probe-group-header { color: #000; border-left: none; border-bottom: 4px solid #000; padding-left: 0; display: inline-block; font-size: 22px; font-weight: 900; text-transform: uppercase; }
+        .theme3 .probe-stat-bar-full { background: #e5e5e5; border: 1px solid #000; }
+        .theme3 .probe-stat-bar-full > div { border-right: 1px solid #000; }
+        .theme3 .probe-badge { border: 1px solid #000; border-radius: 0; }
+        .theme3 .probe-g-val, .theme3 .probe-card-title { font-weight: 900; color: #000; }
+        .theme3 .probe-custom-table, .theme3 .probe-filter-tag { background: #fff; border: 3px solid #000; border-radius: 0; box-shadow: 6px 6px 0px #000; }
+
+        .theme4 { background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%); background-attachment: fixed; color: #fff; }
+        .theme4 .probe-vps-card, .theme4 .probe-global-stats, .theme4 .probe-header-card, .theme4 .probe-chart-card { background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); color: #fff; }
+        .theme4 .probe-vps-card:hover { background: rgba(255, 255, 255, 0.3); border-color: rgba(255, 255, 255, 0.8); }
+        .theme4 .probe-group-header { color: #fff; border-left-color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .theme4 .probe-g-val, .theme4 .probe-card-title { color: #fff; }
+        .theme4 .probe-g-label, .theme4 .probe-g-sub, .theme4 .probe-card-meta { color: rgba(255,255,255,0.8); }
+        .theme4 .probe-stat-bar-full { background: rgba(0,0,0,0.2); }
+        .theme4 .probe-custom-table, .theme4 .probe-filter-tag { background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); color: #fff; }
+        .theme4 .probe-custom-table th, .theme4 .probe-custom-table tr:hover { background: rgba(0,0,0,0.1); color:#fff;}
+        .theme4 .probe-stat-subtext { color: rgba(255,255,255,0.6); }
+
+        .theme5 { background-color: #050505; color: #0ff; font-family: 'Courier New', Courier, monospace; }
+        .theme5 .probe-vps-card, .theme5 .probe-global-stats, .theme5 .probe-header-card, .theme5 .probe-chart-card { background: #0b0c10; border: 1px solid #f0f; border-radius: 0; box-shadow: 0 0 10px rgba(255, 0, 255, 0.2); color: #fff; }
+        .theme5 .probe-vps-card:hover { box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); border-color: #0ff; }
+        .theme5 .probe-group-header { color: #f0f; border-left: 5px solid #0ff; text-shadow: 0 0 5px #f0f; }
+        .theme5 .probe-g-val, .theme5 .probe-card-title { color: #0ff; text-shadow: 0 0 5px #0ff; }
+        .theme5 .probe-g-label, .theme5 .probe-g-sub, .theme5 .probe-card-meta { color: #f0f; }
+        .theme5 .probe-stat-bar-full { background: #222; border: 1px solid #f0f; border-radius: 0; }
+        .theme5 .probe-stat-bar-full > div { background: #0ff !important; box-shadow: 0 0 10px #0ff; border-radius: 0; }
+        .theme5 .probe-badge-bw { background: #f0f; box-shadow: 0 0 5px #f0f; } .theme5 .probe-badge-tf { background: #0ff; color:#000; box-shadow: 0 0 5px #0ff; }
+        .theme5 .probe-custom-table, .theme5 .probe-filter-tag { background: #0b0c10; border: 1px solid #f0f; border-radius: 0; box-shadow: 0 0 10px rgba(255, 0, 255, 0.2); color: #fff; }
+        .theme5 .probe-custom-table th { background: #111; color: #f0f; border-color: #333; } .theme5 .probe-custom-table td { border-color: #333; } .theme5 .probe-custom-table tr:hover { background: #222; }
+        .theme5 .probe-stat-subtext { color: rgba(255,255,255,0.6); }
+        .theme5 #map-container { background-color: #0d1117; border-color: #30363d; background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); }
+
+        /* Cloud themes before the MyVps integration use these legacy card wrappers. */
+        .stats-row { display: contents; }
+        .theme12 .card-left, .theme12 .card-right { display: contents !important; }
+
+        /* ================= MyVps 管理界面辅助样式 ================= */
+        .pc-body { font-family: 'Inter', sans-serif; }
+        .pc-font-mono { font-family: 'JetBrains Mono', monospace; }
+        .pc-body::-webkit-scrollbar { width: 8px; height: 8px; }
+        .pc-body::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        .pc-body::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
+        .pc-body::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
+        .pc-body input[type=number]::-webkit-inner-spin-button,
+        .pc-body input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .myvps-tab-strip { -ms-overflow-style: none; scrollbar-width: none; scroll-snap-type: x proximity; }
+        .myvps-tab-strip::-webkit-scrollbar { display: none; }
+        .myvps-tab-button { scroll-snap-align: start; }
+        @media (min-width: 1024px) {
+            .myvps-tab-strip { overflow-x: visible !important; }
+            .myvps-admin-tab { flex: 1 1 0; min-width: 0; padding-left: .5rem !important; padding-right: .5rem !important; font-size: .75rem !important; }
+        }
+    </style>
+</head>
+<body id="main-body" class="theme1">
+    
+    <div id="app" v-cloak>
+        <div v-if="!isLoggedIn || activeTab === 'probe'" class="probe-body">
+            
+            <div v-if="showLoginModal" class="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white/80 backdrop-blur-xl border border-white p-6 sm:p-10 rounded-[2rem] shadow-2xl w-full max-w-sm relative">
+                    <button @click="showLoginModal = false" class="absolute top-4 right-5 text-2xl text-slate-400 hover:text-slate-600">&times;</button>
+                    <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-6 shadow-lg flex items-center justify-center"><span class="text-white text-3xl">✨</span></div>
+                    <h2 class="text-3xl font-black mb-8 text-center bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600">系统准入</h2>
+                    <input v-model="loginUser" placeholder="用户名 (默认 admin)" class="w-full bg-white/50 border border-white p-4 rounded-2xl mb-4 focus:bg-white transition-all text-slate-700">
+                    <input v-model="password" type="password" placeholder="请输入密码" @keyup.enter="login" class="w-full bg-white/50 border border-white p-4 rounded-2xl mb-8 focus:bg-white transition-all text-slate-700">
+                    <button @click="login" class="w-full bg-gradient-to-r from-slate-800 to-black text-white p-4 rounded-2xl font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all">登 入 系统</button>
+                </div>
+            </div>
+
+            <div v-if="showWelcomePopup && probeSys.enable_popup === 'true'" class="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white rounded-[2rem] p-6 sm:p-8 shadow-2xl w-full max-w-lg relative text-center">
+                    <div class="text-left leading-relaxed text-[15px] max-h-[60vh] overflow-y-auto text-slate-700" v-html="probeSys.popup_content"></div>
+                    <button @click="closePopup" class="mt-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all">我已知晓</button>
+                </div>
+            </div>
+
+            <div class="probe-container">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 header">
+                    <h1 class="text-2xl font-black m-0 flex items-center gap-3">
+                        <span v-if="probeDetailId" @click="probeDetailId = null" class="cursor-pointer text-blue-500 hover:underline text-sm font-medium">⬅ 返回</span>
+                        {{ probeSys.site_title || 'Server Monitor Pro' }}
+                    </h1>
+                    
+                    <div class="flex items-center gap-4 flex-wrap" v-if="!probeDetailId">
+                        <div class="probe-view-controls view-controls">
+                            <button class="probe-toggle-btn toggle-btn" :class="{active: probeView === 'card'}" @click="setProbeView('card')">卡片</button>
+                            <button class="probe-toggle-btn toggle-btn" :class="{active: probeView === 'table'}" @click="setProbeView('table')">表格</button>
+                            <button class="probe-toggle-btn toggle-btn" :class="{active: probeView === 'map'}" @click="setProbeView('map')">地图</button>
+                        </div>
+                        <button v-if="!isLoggedIn" @click="showLoginModal = true" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-bold text-sm shadow-md hover:opacity-90">👨‍💻 MyVps 管理面板</button>
+                        <button v-else @click="activeTab = (role === 'admin' ? 'nodes' : 'dashboard')" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg font-bold text-sm shadow-md hover:opacity-90">返回 MyVps 面板</button>
+                    </div>
+                </div>
+
+                <div v-if="probeDetailId">
+                    <div class="probe-header-card header-card">
+                        <div class="flex items-center mb-4">
+                            <h2 class="text-xl sm:text-2xl font-black m-0 mr-3 flex items-center card-title-text">
+                                <img v-if="probeDetail.country && probeDetail.country !== 'XX'" :src="'https://flagcdn.com/24x18/' + probeDetail.country.toLowerCase() + '.png'" class="mr-2 rounded-sm">{{ probeDetail.name }}
+                            </h2>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold text-white" :style="{background: isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '#10b981' : '#ef4444'}">{{ isOnline(probeDetail.last_updated, probeDetail.realtime_state) ? '在线' : '离线' }}</span>
+                        </div>
+                        <div class="probe-info-grid info-grid">
+                            <div class="flex flex-col"><span class="probe-info-label info-label">运行时间</span><span class="font-medium info-value">{{ probeDetail.uptime || 'N/A' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">架构</span><span class="font-medium info-value">{{ probeDetail.arch || 'N/A' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">系统</span><span class="font-medium info-value">{{ probeDetail.os || 'N/A' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">虚拟化</span><span class="font-medium info-value">{{ probeDetail.virt || 'N/A' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">CPU</span><span class="font-medium truncate info-value" :title="probeDetail.cpu_info">{{ probeDetail.cpu_info || 'N/A' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">Load</span><span class="font-medium info-value">{{ probeDetail.load_avg || '0.00' }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">上传 / 下载</span><span class="font-medium info-value">{{ formatBytes(probeDetail.net_tx) }} / {{ formatBytes(probeDetail.net_rx) }}</span></div>
+                            <div class="flex flex-col"><span class="probe-info-label info-label">启动时间</span><span class="font-medium info-value">{{ probeDetail.boot_time || 'N/A' }}</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="probe-charts-grid charts-grid">
+                        <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">CPU <span class="stat-val">{{ probeDetail.cpu || 0 }}%</span></h3><canvas id="probeChartCPU"></canvas></div>
+                        <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">内存 <span class="stat-val">{{ probeDetail.ram || 0 }}%</span></h3><div class="text-xs text-gray-500 mb-1">Swap: {{ probeDetail.swap_used }} / {{ probeDetail.swap_total }} MiB</div><canvas id="probeChartRAM"></canvas></div>
+                        <div class="probe-chart-card chart-card">
+                            <h3 class="mt-0 text-base flex justify-between">磁盘 <span class="stat-val">{{ probeDetail.disk || 0 }}%</span></h3>
+                            <div class="w-full h-5 bg-gray-200 rounded-full overflow-hidden mt-10"><div id="disk-bar" class="h-full transition-all duration-500" :style="{width: (probeDetail.disk || 0) + '%', background: '#34d399'}"></div></div>
+                            <p class="text-right text-xs text-gray-500 mt-2">{{ (probeDetail.disk_used/1024).toFixed(2) }} GiB / {{ (probeDetail.disk_total/1024).toFixed(2) }} GiB</p>
+                        </div>
+                        <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">进程数 <span class="stat-val">{{ probeDetail.processes || 0 }}</span></h3><canvas id="probeChartProc"></canvas></div>
+                        <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">网络速度 <span class="text-sm speed-val"><span class="text-emerald-500">↓</span> {{ formatBytes(probeDetail.net_in_speed) }}/s | <span class="text-blue-500">↑</span> {{ formatBytes(probeDetail.net_out_speed) }}/s</span></h3><canvas id="probeChartNet"></canvas></div>
+                        <div class="probe-chart-card chart-card"><h3 class="mt-0 text-base flex justify-between">TCP / UDP <span class="text-sm speed-val">TCP {{ probeDetail.tcp_conn || 0 }} | UDP {{ probeDetail.udp_conn || 0 }}</span></h3><canvas id="probeChartConn"></canvas></div>
+                        <div class="probe-chart-card probe-chart-full chart-card chart-full">
+                            <h3 class="mt-0 text-base flex justify-between">国内延迟追踪 (24小时) <span class="text-xs font-normal speed-val">电信 <b>{{ probeDetail.ping_ct || 0 }}ms</b> | 联通 <b>{{ probeDetail.ping_cu || 0 }}ms</b> | 移动 <b>{{ probeDetail.ping_cm || 0 }}ms</b> | 字节 <b>{{ probeDetail.ping_bd || 0 }}ms</b></span></h3>
+                            <canvas id="probeChartPing"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else>
+                    <div class="probe-filter-bar filter-bar">
+                        <span class="probe-filter-tag filter-tag" :class="{active: currentFilter === 'all'}" @click="currentFilter = 'all'">全部 {{ publicProbeServers.length }}</span>
+                        <span v-for="(count, code) in probeCountryStats" :key="code" class="probe-filter-tag filter-tag" :class="{active: currentFilter === code}" @click="currentFilter = code">
+                            <img :src="'https://flagcdn.com/16x12/' + (code === 'TW' ? 'cn' : code.toLowerCase()) + '.png'"> {{ code }} {{ count }}
+                        </span>
+                    </div>
+
+                    <div class="probe-global-stats global-stats">
+                        <div class="stats-row">
+                            <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">服务器总数</div><div class="probe-g-val g-val">{{ publicProbeServers.length }}</div><div class="probe-g-sub g-sub">在线 <span class="text-emerald-500">{{ probeGlobalOnline }}</span> | 离线 <span class="text-red-500">{{ probeGlobalOffline }}</span></div></div>
+                            <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">总计流量 (入 | 出) <span v-if="probeSys.auto_reset_traffic==='true'" class="text-[10px] text-orange-600">(按期重置)</span></div><div class="probe-g-val g-val">{{ formatBytes(probeGlobalNetRx) }} | {{ formatBytes(probeGlobalNetTx) }}</div></div>
+                            <div class="probe-g-item g-item w-full sm:w-auto"><div class="probe-g-label g-label">实时网速 (入 | 出)</div><div class="probe-g-val g-val"><span class="text-emerald-500">↓</span> {{ formatBytes(probeGlobalSpeedIn) }}/s | <span class="text-blue-500">↑</span> {{ formatBytes(probeGlobalSpeedOut) }}/s</div></div>
+                        </div>
+                    </div>
+
+                    <div v-if="probeView === 'card'">
+                        <template v-if="Object.keys(filteredProbeGroups).length === 0"><p class="text-center text-gray-500 w-full mt-10">暂无匹配的服务器</p></template>
+                        <template v-for="(servers, groupName) in filteredProbeGroups" :key="groupName">
+                            <div class="probe-group-header group-header">{{ groupName }}</div>
+                            <div class="probe-grid-container grid-container">
+                                <div v-for="s in servers" :key="s.id" @click="openProbeDetail(s.id)" class="probe-vps-card vps-card">
+                                    <div class="probe-card-left card-left item-left-bag">
+                                        <div class="probe-card-title card-title item-title" :class="isOnline(s.last_updated, s.realtime_state) ? 'is-online' : 'is-offline'">
+                                            <div class="probe-status-dot status-dot item-status" :class="isOnline(s.last_updated, s.realtime_state) ? 'is-online' : 'is-offline'" :style="{background: isOnline(s.last_updated, s.realtime_state) ? '#10b981' : '#ef4444'}"></div>
+                                            <img v-if="s.country && s.country !== 'XX'" :src="'https://flagcdn.com/24x18/' + (s.country === 'TW' ? 'cn' : s.country.toLowerCase()) + '.png'" class="mr-1.5 rounded-sm">
+                                            <span class="text-[15px] truncate card-title-text">{{ s.name }}</span>
+                                        </div>
+                                        <div class="card-meta-list">
+                                            <div v-if="probeSys.show_price === 'true'" class="probe-card-meta card-meta item-meta item-meta-price mt-2">价格: {{ s.price || '免费' }}</div>
+                                            <div v-if="probeSys.show_expire === 'true'" class="probe-card-meta card-meta item-meta item-meta-expire" :class="probeSys.show_price!=='true'?'mt-2':''">剩余天数: {{ getExpireText(s.expire_date) }}</div>
+                                            <div class="probe-card-meta card-meta item-meta item-meta-traffic" :class="probeSys.show_price!=='true'&&probeSys.show_expire!=='true'?'mt-2':''">流量: <span class="text-emerald-500">↓</span> {{ formatBytes(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_rx' : 'net_rx']) }} | <span class="text-blue-500">↑</span> {{ formatBytes(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_tx' : 'net_tx']) }}</div>
+                                            <div class="probe-card-meta card-meta item-meta item-meta-uptime mt-0.5">在线: {{ (s.uptime||'-').replace('days','天').replace('day','天') }} | 更新: {{ Math.round((Date.now() - s.last_updated)/1000) }}s前</div>
+                                        </div>
+                                        
+                                        <div class="probe-card-badges card-badges item-badges">
+                                            <span v-if="probeSys.show_bw === 'true' && s.bandwidth" class="probe-badge badge probe-badge-bw badge-bw">{{ s.bandwidth }}</span>
+                                            <span v-if="probeSys.show_tf === 'true' && s.traffic_limit" class="probe-badge badge probe-badge-tf badge-tf">{{ s.traffic_limit }}</span>
+                                            <span v-if="s.ip_v4 === '1'" class="probe-badge badge probe-badge-v4 badge-v4">IPv4</span>
+                                            <span v-if="s.ip_v6 === '1'" class="probe-badge badge probe-badge-v6 badge-v6">IPv6</span>
+                                        </div>
+                                        <div class="item-ping">
+                                            <div class="probe-ping-box ping-box">
+                                                <span class="ping-item">电信 <span class="font-bold" :style="{color: getPingColor(s.ping_ct)}">{{ s.ping_ct === '0' ? '超时' : s.ping_ct + 'ms' }}</span></span>
+                                                <span class="ping-item">联通 <span class="font-bold" :style="{color: getPingColor(s.ping_cu)}">{{ s.ping_cu === '0' ? '超时' : s.ping_cu + 'ms' }}</span></span>
+                                                <span class="ping-item">移动 <span class="font-bold" :style="{color: getPingColor(s.ping_cm)}">{{ s.ping_cm === '0' ? '超时' : s.ping_cm + 'ms' }}</span></span>
+                                                <span class="ping-item">字节 <span class="font-bold" :style="{color: getPingColor(s.ping_bd)}">{{ s.ping_bd === '0' ? '超时' : s.ping_bd + 'ms' }}</span></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="probe-card-right card-right item-right-bag">
+                                        <div class="probe-stat-group stat-group item-cpu">
+                                            <div class="probe-stat-header stat-header"><span class="stat-label">CPU</span><span class="stat-val" :style="{color: s.cpu>80?'#ef4444':''}">{{ parseFloat(s.cpu||0).toFixed(1) }}%</span></div>
+                                            <div class="probe-stat-bar-full stat-bar-full" :style="{'--percent': Math.min(Math.max(Number(s.cpu) || 0, 0), 100) + '%'}"><div class="stat-bar-inner" :style="{width: s.cpu+'%', background: s.cpu>80?'#ef4444':'#3b82f6'}"></div></div>
+                                            <div class="probe-stat-subtext stat-subtext" :title="s.cpu_info">{{ s.cpu_info || '-' }}</div>
+                                        </div>
+                                        <div class="probe-stat-group stat-group item-ram">
+                                            <div class="probe-stat-header stat-header"><span class="stat-label">内存</span><span class="stat-val" :style="{color: s.ram>80?'#ef4444':''}">{{ parseFloat(s.ram||0).toFixed(1) }}%</span></div>
+                                            <div class="probe-stat-bar-full stat-bar-full" :style="{'--percent': Math.min(Math.max(Number(s.ram) || 0, 0), 100) + '%'}"><div class="stat-bar-inner" :style="{width: s.ram+'%', background: s.ram>80?'#ef4444':'#10b981'}"></div></div>
+                                            <div class="probe-stat-subtext stat-subtext">{{ formatBytes(s.ram_used*1048576) }} / {{ formatBytes(s.ram_total*1048576) }}</div>
+                                        </div>
+                                        <div class="probe-stat-group stat-group item-disk">
+                                            <div class="probe-stat-header stat-header"><span class="stat-label">存储</span><span class="stat-val" :style="{color: s.disk>80?'#ef4444':''}">{{ parseFloat(s.disk||0).toFixed(1) }}%</span></div>
+                                            <div class="probe-stat-bar-full stat-bar-full" :style="{'--percent': Math.min(Math.max(Number(s.disk) || 0, 0), 100) + '%'}"><div class="stat-bar-inner" :style="{width: s.disk+'%', background: s.disk>80?'#ef4444':'#10b981'}"></div></div>
+                                            <div class="probe-stat-subtext stat-subtext">{{ formatBytes(s.disk_used*1048576) }} / {{ formatBytes(s.disk_total*1048576) }}</div>
+                                        </div>
+                                        <div class="flex justify-between text-[11px] text-gray-500 mt-0.5 item-sysinfo">
+                                            <div class="truncate mr-1 stat-subtext" :title="s.os+' | '+s.arch+' | '+s.virt">{{ s.os || '-' }} | {{ s.arch || '-' }} | {{ s.virt || '-' }}</div>
+                                            <div class="shrink-0 stat-subtext">TCP/UDP: {{ s.tcp_conn||0 }} / {{ s.udp_conn||0 }}</div>
+                                        </div>
+                                        <div class="flex justify-between text-[11px] text-gray-500 mt-1 item-speed">
+                                            <div class="stat-subtext"><span class="text-emerald-500">↓</span> {{ formatBytes(s.net_in_speed) }}/s</div>
+                                            <div class="stat-subtext"><span class="text-blue-500">↑</span> {{ formatBytes(s.net_out_speed) }}/s</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div v-if="probeView === 'table'" class="overflow-x-auto">
+                        <table class="probe-custom-table custom-table">
+                            <thead><tr><th>状态</th><th>节点名称</th><th>地区</th><th>系统/架构/虚拟化</th><th>CPU</th><th>内存</th><th>磁盘</th><th>流量(入|出)</th><th>下行</th><th>上行</th><th>更新</th></tr></thead>
+                            <tbody>
+                                <tr v-if="filteredProbeServers.length===0"><td colspan="11" class="text-center">暂无数据</td></tr>
+                                <tr v-for="s in filteredProbeServers" :key="s.id" @click="openProbeDetail(s.id)">
+                                    <td class="text-center"><div class="probe-status-dot status-dot inline-block m-0" :style="{background: isOnline(s.last_updated, s.realtime_state) ? '#10b981' : '#ef4444'}"></div></td>
+                                    <td><b class="card-title-text">{{ s.name }}</b></td>
+                                    <td><img v-if="s.country && s.country!=='XX'" :src="'https://flagcdn.com/24x18/' + (s.country === 'TW' ? 'cn' : s.country.toLowerCase()) + '.png'"></td>
+                                    <td><span class="text-xs text-gray-500 os-text">{{ s.os||'-' }} / {{ s.arch||'-' }} / {{ s.virt||'-' }}</span></td>
+                                    <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-blue-500" :style="{width: s.cpu+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.cpu||0).toFixed(1) }}%</span></div></td>
+                                    <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-emerald-500" :style="{width: s.ram+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.ram||0).toFixed(1) }}%</span></div></td>
+                                    <td class="min-w-[100px]"><div class="flex items-center gap-2"><div class="w-[50px] h-1 bg-gray-200 rounded-sm overflow-hidden probe-stat-bar stat-bar"><div class="h-full bg-emerald-500" :style="{width: s.disk+'%'}"></div></div><span class="stat-val">{{ parseFloat(s.disk||0).toFixed(1) }}%</span></div></td>
+                                    <td class="text-xs text-gray-500 card-meta">{{ formatBytes(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_rx' : 'net_rx']) }} | {{ formatBytes(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_tx' : 'net_tx']) }}</td>
+                                    <td class="stat-val">{{ formatBytes(s.net_in_speed) }}/s</td>
+                                    <td class="stat-val">{{ formatBytes(s.net_out_speed) }}/s</td>
+                                    <td class="text-xs text-gray-500 card-meta">{{ Math.round((Date.now() - s.last_updated)/1000) }} 秒前</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div v-show="probeView === 'map'">
+                        <div id="map-container"></div>
+                    </div>
+
+                </div>
+                
+                <div class="text-center mt-10 pb-5 text-sm opacity-80 card-meta">
+                    <div class="mb-2"><span class="mr-4">👁️ 历史总访问：<b class="text-blue-500 stat-val">{{ probeSys.visits_total || 0 }}</b> 次</span><span>🔥 今日访问：<b class="text-emerald-500 stat-val">{{ probeSys.visits_today || 0 }}</b> 次</span></div>
+                    Powered by MyVps Monitor
+                </div>
+            </div>
+        </div>
+
+        <div v-if="isLoggedIn && activeTab !== 'probe'" class="max-w-6xl mx-auto space-y-8 animate-fade-in p-4 md:p-8">
+            
+            <div class="bg-white/70 backdrop-blur-xl border border-white/80 p-4 md:px-6 rounded-[2rem] shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row justify-between items-center sticky top-4 z-50 gap-4">
+                <div class="flex flex-wrap justify-center lg:justify-start items-center gap-3 md:gap-4 w-full lg:w-auto">
+                    <h1 class="text-xl md:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 shrink-0">
+                        {{ siteTitle || 'MyVps' }}
+                    </h1>
+                    <div class="hidden md:block w-px h-6 bg-slate-300"></div>
+                    </div>
+                <div class="flex flex-wrap justify-center lg:justify-end items-center gap-2 w-full lg:w-auto">
+                    <span class="text-[10px] md:text-xs font-bold text-emerald-500 bg-emerald-100/50 px-3 py-2 rounded-full border border-emerald-200 animate-pulse">🟢 实时监控中</span>
+                    <button @click="refreshData" class="bg-white/50 hover:bg-white/80 border border-slate-200 px-4 py-2 rounded-full text-xs font-medium transition-all shadow-sm">🔄 刷新</button>
+                    <button @click="logout" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-full text-xs font-bold transition-all border border-transparent hover:border-rose-200">退出</button>
+                </div>
+            </div>
+
+            <div class="flex justify-center mb-4 px-2">
+                <div class="myvps-tab-strip w-full max-w-full overflow-x-auto bg-slate-200/50 p-1.5 rounded-full flex flex-nowrap justify-start lg:justify-center gap-1 backdrop-blur-sm border border-white/50 shadow-inner">
+                    <template v-if="role === 'admin'">
+                        <button @click="activeTab = 'nodes'" :class="activeTab === 'nodes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">服务器监控</button>
+                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">⚙️ 系统设置</button>
+                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm text-emerald-600 hover:bg-emerald-50 shadow-sm border border-transparent hover:border-emerald-200">🌐 探针全景大盘</button>
+                    </template>
+                    <template v-if="role === 'user'">
+                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-6 md:px-8 py-2.5 rounded-full font-bold transition-all text-sm md:text-base">⚙️ 系统设置</button>
+                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="px-6 md:px-8 py-2.5 rounded-full font-bold transition-all text-sm md:text-base text-blue-600 hover:bg-blue-50 shadow-sm border border-transparent hover:border-blue-200">🌐 探针全景大盘</button>
+                    </template>
+                </div>
+            </div>
+
+            <div v-if="role === 'admin' && activeTab === 'nodes'" class="space-y-8">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-indigo-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">ONLINE SERVERS</div><div class="text-3xl font-black text-slate-700">{{ globalOnline }} / {{ servers.length }}</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-indigo-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">AGGREGATE TRAFFIC</div><div class="text-3xl font-black text-slate-700">{{ formatBytes(globalTraffic) }}</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-indigo-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">DOWNLOAD</div><div class="text-2xl font-black text-emerald-500 truncate">↓ {{ formatBytes(globalSpeedIn) }}/s</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-indigo-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">UPLOAD</div><div class="text-2xl font-black text-blue-500 truncate">↑ {{ formatBytes(globalSpeedOut) }}/s</div></div>
+                </div>
+
+                <div class="bg-white/60 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 flex flex-col md:flex-row gap-4 items-end">
+                    <div class="flex-1"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">服务器别名</label><input v-model="newVps.name" placeholder="例如: 日本软银 01" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
+                    <div class="flex-1"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">公网 IP</label><input v-model="newVps.ip" placeholder="8.8.8.8" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
+                    <div class="w-full md:w-48"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">系统架构</label><select v-model="newVps.os" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white outline-none font-medium text-slate-700"><option value="debian">Ubuntu / Debian</option><option value="alpine">Alpine Linux</option></select></div>
+                    <button @click="addVps" class="bg-slate-800 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-black transition-all shadow-lg hover:scale-105 whitespace-nowrap">接入机器</button>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <div v-for="vps in servers" :key="vps.ip" class="bg-white/70 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 flex flex-col overflow-hidden transition-all hover:shadow-2xl">
+                        <div class="p-6 md:p-8 relative">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="font-black text-2xl text-slate-800 flex items-center gap-2 mb-1">{{ vps.name }}<span :class="vps.realtime_state === 'stale' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' : (isOnline(vps.last_report, vps.realtime_state) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]')" class="w-3 h-3 rounded-full inline-block"></span></h3>
+                                    <p class="text-sm font-mono text-slate-400 font-medium">{{ vps.ip }}</p>
+                                </div>
+                                <button @click="deleteVps(vps.ip)" class="text-slate-300 hover:text-rose-500 font-bold transition-all">彻底移除</button>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-slate-400 font-mono font-black mb-4 px-1 uppercase tracking-wider"><span>UP: {{ vps.uptime || 'N/A' }}</span><span>LOAD: {{ vps.load || '0.00' }}</span></div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">CPU</div><div class="font-black text-lg text-slate-700">{{ vps.cpu || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-indigo-400 h-1 rounded-full" :style="{ width: (vps.cpu || 0) + '%' }"></div></div></div>
+                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">MEM</div><div class="font-black text-lg text-slate-700">{{ vps.mem || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-purple-400 h-1 rounded-full" :style="{ width: (vps.mem || 0) + '%' }"></div></div></div>
+                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">DISK</div><div class="font-black text-lg text-slate-700">{{ vps.disk || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-emerald-400 h-1 rounded-full" :style="{ width: (vps.disk || 0) + '%' }"></div></div></div>
+                                <div class="bg-white/50 p-2 rounded-2xl border border-white shadow-sm flex flex-col justify-center text-center"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">SPEED</div><div class="text-[10px] font-black text-emerald-500 truncate">↓ {{ formatBytes(vps.net_in_speed || 0) }}/s</div><div class="text-[10px] font-black text-blue-500 truncate mt-0.5">↑ {{ formatBytes(vps.net_out_speed || 0) }}/s</div></div>
+                            </div>
+                            <div class="bg-white/40 p-4 rounded-2xl border border-white"><div class="text-[10px] text-slate-400 font-bold tracking-wider mb-2">7-DAY TRAFFIC TREND</div><div :id="'chart-' + vps.ip" class="w-full h-32"></div></div>
+                        </div>
+
+                        <div class="px-6 md:px-8 pb-4">
+                            <div class="bg-emerald-50/70 border-2 border-dashed border-emerald-200 p-6 rounded-[1.5rem] mb-4 relative overflow-hidden group shadow-sm hover:border-emerald-300 transition-all">
+                                <div class="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl shadow-sm">MONITOR AGENT</div>
+                                <h4 class="font-black text-emerald-800 text-lg mb-2 flex items-center gap-2">部署监控 Agent</h4>
+                                <p class="text-xs text-emerald-600/80 font-bold leading-relaxed">复制下方命令到目标 VPS 执行，仅安装服务器监控、探针上报与实时状态客户端。</p>
+                            </div>
+                        </div>
+
+                        <div class="p-4 md:p-6 bg-slate-100/50 border-t border-white flex flex-col gap-3">
+                            <div class="bg-slate-800 p-4 rounded-[1.25rem] group shadow-inner transition-colors">
+                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2 flex justify-between items-center">
+                                    <span>Full Deploy Command · MyVps Monitor Agent</span>
+                                    <div class="flex gap-2 text-[9px]">
+                                        <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="debian" class="accent-indigo-500"> Ubuntu/Debian</label>
+                                        <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="alpine" class="accent-indigo-500"> Alpine</label>
+                                    </div>
+                                </div>
+                                <div class="text-emerald-400 font-mono text-xs truncate cursor-pointer hover:text-emerald-300 transition-colors" @click="copyCommand(generateCmd(vps.ip), '部署指令已复制！')">{{ generateCmd(vps.ip) }}</div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div v-if="activeTab === 'settings'" class="space-y-6">
+                <template v-if="role === 'admin'">
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">⚙️ MyVps 系统参数</h3>
+                        <div class="max-w-md mb-6">
+                            <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">控制面板全局名称</label>
+                            <div class="flex gap-3"><input v-model="siteTitleInput" placeholder="Cluster Gateway" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="saveSiteTitle" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md whitespace-nowrap">保存更改</button></div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">⚡ Realtime 状态频率策略</h3>
+                        <p class="text-xs text-slate-500 mb-5 font-medium">全局影响所有 VPS 的监控 Agent。上线、掉线和状态变化仍会立即推送。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div><label class="block text-xs font-bold text-slate-500 mb-1">管理员后台查看 (秒)</label><input type="number" v-model.number="probeSys.realtime_admin_interval" min="5" max="60" step="1" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"><p class="mt-1 text-[10px] text-slate-400">范围 5-60 秒，默认 5 秒</p></div>
+                            <div><label class="block text-xs font-bold text-slate-500 mb-1">公开探针查看 (秒)</label><input type="number" v-model.number="probeSys.realtime_public_interval" min="10" max="120" step="1" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"><p class="mt-1 text-[10px] text-slate-400">范围 10-120 秒，默认 10 秒</p></div>
+                            <div><label class="block text-xs font-bold text-slate-500 mb-1">无人查看空闲 (秒)</label><input type="number" v-model.number="probeSys.realtime_idle_interval" min="30" max="600" step="1" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"><p class="mt-1 text-[10px] text-slate-400">范围 30-600 秒，默认 30 秒</p></div>
+                        </div>
+                        <p class="mt-4 text-[10px] font-medium text-amber-600">要求：公开探针频率不得快于管理员后台；空闲频率不得快于公开探针。修改后点击下方“立即生效配置”。</p>
+                    </div>
+
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center justify-between">
+                            <div class="flex items-center gap-2">📊 探针大盘外观与设置</div>
+                            <button @click="pullGithubNodes" class="text-xs bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-200 transition-colors shadow-sm">🔄 云端拉取最新主题/测速库</button>
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div class="space-y-4">
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">大盘展示标题</label><input v-model="probeSys.site_title" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1">前端主题风格</label>
+                                    <select v-model="probeSys.theme" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700">
+                                        <option v-for="t in availableThemes" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                    </select>
+                                </div>
+                                <div v-if="probeSys.theme === 'theme6' || hasCustomCssFlag"><label class="block text-xs font-bold text-slate-500 mb-1">自定义 CSS 代码</label><textarea v-model="probeSys.custom_css" rows="3" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-mono"></textarea></div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">自定义背景图片 URL (清空恢复纯色)</label><input v-model="probeSys.custom_bg" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">自定义 &lt;head&gt; 注入</label><textarea v-model="probeSys.custom_head" rows="2" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-mono"></textarea></div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">自定义底部 Script 注入</label><textarea v-model="probeSys.custom_script" rows="2" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-mono"></textarea></div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">探针客户端上报间隔 (秒)</label><input type="number" v-model="probeSys.report_interval" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                            </div>
+                            <div class="space-y-4">
+                                <label class="block text-sm font-bold text-slate-700 mb-2">👁️ 前台展示控制</label>
+                                <label class="flex items-center gap-2 text-sm bg-yellow-50 p-2 border border-yellow-200 rounded-lg cursor-pointer"><input type="checkbox" v-model="probeSys.auto_reset_traffic" true-value="true" false-value="false" class="w-4 h-4"> <span class="flex-1">启用流量按期重置 (全局总控开关)<br><span class="text-[10px] text-slate-500">开启后各节点根据独立【重置日】自动清零流量。关闭则显示累计总流量。</span></span></label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.is_public" true-value="true" false-value="false" class="w-4 h-4"> 开启公开访问 (取消勾选必须登录)</label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.show_price" true-value="true" false-value="false" class="w-4 h-4"> 显示机器价格</label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.show_expire" true-value="true" false-value="false" class="w-4 h-4"> 显示机器到期时间</label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.show_bw" true-value="true" false-value="false" class="w-4 h-4"> 显示带宽徽章</label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.show_tf" true-value="true" false-value="false" class="w-4 h-4"> 显示流量配额徽章</label>
+                                <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" v-model="probeSys.enable_popup" true-value="true" false-value="false" class="w-4 h-4"> 开启首页访问公告弹窗 (支持HTML)</label>
+                                <div v-if="probeSys.enable_popup === 'true'"><textarea v-model="probeSys.popup_content" rows="4" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm" placeholder="<h3>公告</h3><p>内容...</p>"></textarea></div>
+
+                                <label class="block text-sm font-bold text-blue-600 mt-6 mb-2">📡 动态下发三网测速节点配置</label>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">电信 (CT)</label>
+                                    <select v-model="probeSys.ping_node_ct" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm">
+                                        <option value="default">默认节点 (双栈多节点轮询)</option>
+                                        <option v-for="n in pingNodes.ct" :key="n.host" :value="n.host">{{ n.name }}</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">联通 (CU)</label>
+                                    <select v-model="probeSys.ping_node_cu" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm">
+                                        <option value="default">默认节点 (双栈多节点轮询)</option>
+                                        <option v-for="n in pingNodes.cu" :key="n.host" :value="n.host">{{ n.name }}</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1">移动 (CM)</label>
+                                    <select v-model="probeSys.ping_node_cm" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm">
+                                        <option value="default">默认节点 (双栈多节点轮询)</option>
+                                        <option v-for="n in pingNodes.cm" :key="n.host" :value="n.host">{{ n.name }}</option>
+                                    </select>
+                                </div>
+
+                                <label class="block text-sm font-bold text-rose-500 mt-6 mb-2">✈️ Telegram 管理与告警设置</label>
+                                <div>
+                                    <select v-model="probeSys.tg_notify" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm font-medium text-slate-700 mb-2">
+                                        <option value="false">关闭告警 (仅使用机器人控制面板)</option><option value="true">开启告警 (掉线自动推送)</option>
+                                    </select>
+                                    <input v-model="probeSys.tg_bot_token" placeholder="Bot Token (必须填写以启用机器人命令)" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm mb-2">
+                                    <input v-model="probeSys.tg_chat_id" placeholder="Chat ID (管理员ID)" class="w-full bg-white/50 border p-2.5 rounded-xl text-sm">
+                                </div>
+                            </div>
+                        </div>
+                        <button @click="saveProbeSettings" class="mt-6 bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-md">💾 立即生效配置</button>
+                    </div>
+
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">💻 探针服务端管理</h3>
+                        <p class="text-sm text-slate-500 mb-6 font-medium">提示：探针大盘已与 MyVps Agent 统一。您在“服务器监控”页面接入的机器会<b>自动</b>出现在此处，在这里只需维护展示信息。</p>
+
+                        <div class="overflow-x-auto bg-white rounded-2xl border border-slate-100 shadow-sm">
+                            <table class="w-full text-left border-collapse text-sm">
+                                <thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100"><th class="p-4">节点名称</th><th class="p-4">分组</th><th class="p-4">状态</th><th class="p-4">操作</th></tr></thead>
+                                <tbody>
+                                    <tr v-if="adminProbeServers.length===0"><td colspan="4" class="p-6 text-center text-slate-400">暂无探针，请在上方添加</td></tr>
+                                    <tr v-for="s in adminProbeServers" :key="s.id" class="border-b border-slate-50 hover:bg-slate-50">
+                                        <td class="p-4 font-bold text-slate-700">{{ s.name }} <span v-if="s.is_hidden==='true'" class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">隐藏</span></td>
+                                        <td class="p-4">{{ s.server_group || '默认分组' }}</td>
+                                        <td class="p-4"><span v-if="isOnline(s.last_updated, s.realtime_state)" class="text-emerald-500 font-bold">● 在线</span><span v-else class="text-rose-500 font-bold">● 离线</span></td>
+                                        <td class="p-4 flex gap-2">
+                                            <button @click="openProbeEditModal(s)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg font-bold transition">编辑展示信息</button>
+                                            <button @click="deleteProbeNode(s.id)" class="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-1.5 rounded-lg font-bold transition">删除记录</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </template>
+
+                <template v-if="role === 'user'">
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">🔑 账号安全</h3>
+                        <div class="max-w-md">
+                            <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">修改登录密码</label>
+                            <div class="flex gap-3"><input v-model="userNewPassword" type="password" placeholder="请输入新密码" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="updateUserPassword" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md whitespace-nowrap">确认修改</button></div>
+                        </div>
+                    </div></template>
+            </div>
+            
+        </div>
+        
+        <div v-if="probeEditModalOpen" class="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+                <button @click="probeEditModalOpen = false" class="absolute top-4 right-5 text-2xl text-slate-400 hover:text-slate-600">&times;</button>
+                <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">✏️ 编辑探针展示信息</h3>
+                <div class="space-y-4">
+                    <div class="flex gap-4">
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">展示别名</label><input v-model="editingProbeNode.name" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">前台可见性</label><select v-model="editingProbeNode.is_hidden" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"><option value="false">显示 (默认)</option><option value="true">隐藏</option></select></div>
+                    </div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">分组名称</label><input v-model="editingProbeNode.server_group" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                    <div class="flex gap-4">
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">价格</label><input v-model="editingProbeNode.price" placeholder="如: 10USD/年" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">到期时间</label><input type="date" v-model="editingProbeNode.expire_date" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">带宽 (徽章)</label><input v-model="editingProbeNode.bandwidth" placeholder="如: 1Gbps" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-slate-500 mb-1">流量总量 (徽章)</label><input v-model="editingProbeNode.traffic_limit" placeholder="如: 1TB/月" class="w-full border p-2.5 rounded-xl text-sm font-medium text-slate-700"></div>
+                    </div>
+                    <div class="bg-amber-50 p-4 border border-amber-100 rounded-xl mt-2">
+                        <label class="block text-xs font-bold text-amber-700 mb-1">每月流量重置日 (1-31)</label>
+                        <p class="text-[10px] text-amber-600 mb-2">需在【系统设置】开启“启用流量按期重置”。到达此日时该机器记录流量自动清零。</p>
+                        <input type="number" min="1" max="31" v-model="editingProbeNode.reset_day" class="w-full border border-amber-200 p-2.5 rounded-xl text-sm font-medium text-amber-900 bg-white">
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end gap-3">
+                    <button @click="probeEditModalOpen = false" class="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition">取消</button>
+                    <button @click="saveProbeEdit" class="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">保存更改</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        if (!window.Vue) {
+            const app = document.getElementById('app');
+            app.removeAttribute('v-cloak');
+            app.innerHTML = '<div style="max-width:680px;margin:15vh auto;padding:24px;font-family:system-ui;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:16px"><h2 style="margin-top:0">页面核心资源加载失败</h2><p>当前网络无法连接 Vue CDN。请刷新页面，或检查 unpkg.com 和 cdn.jsdelivr.net 是否被拦截。</p></div>';
+            throw new Error('Vue failed to load from both CDNs');
+        }
+        const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } = Vue;
+        
+        const sha256 = async (text) => { const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)); return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join(''); };
+        const generateHMAC = async (keyHex, message) => { const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))); const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]); const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)); return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join(''); };
+        const signedAuthHeader = async (keyHex, username, method, path) => { const timestamp = Date.now().toString(); const nonce = crypto.randomUUID(); const signature = await generateHMAC(keyHex, `${username}\n${timestamp}\n${nonce}\n${method}\n${new URL(path, location.origin).pathname}`); return `${btoa(username)}.${timestamp}.${nonce}.${signature}`; };
+        const toBase64Url = (uint8Array) => { let str = ''; for (let i = 0; i < uint8Array.length; i++) str += String.fromCharCode(uint8Array[i]); return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); };
+                const iso2To3 = {"US":"USA","CN":"CHN","JP":"JPN","HK":"HKG","SG":"SGP","KR":"KOR","DE":"DEU","GB":"GBR","NL":"NLD","FR":"FRA","CA":"CAN","AU":"AUS","IN":"IND","BR":"BRA","RU":"RUS","ZA":"ZAF","TW":"TWN","IT":"ITA","SE":"SWE","CH":"CHE","ES":"ESP","PL":"POL","FI":"FIN","NO":"NOR","DK":"DNK","IE":"IRL","AT":"AUT","TR":"TUR","AE":"ARE","MY":"MYS","TH":"THA","VN":"VNM","PH":"PHL","ID":"IDN"};
+        const countryCoords = {'US': [37.09, -95.71], 'CN': [35.86, 104.19], 'JP': [36.20, 138.25], 'HK': [22.31, 114.16], 'SG': [1.35, 103.81], 'KR': [35.90, 127.76], 'DE': [51.16, 10.45], 'GB': [55.37, -3.43], 'NL': [52.13, 5.29], 'FR': [46.22, 2.21], 'CA': [56.13, -106.34], 'AU': [-25.27, 133.77], 'IN': [20.59, 78.96], 'BR': [-14.23, -51.92], 'RU': [61.52, 105.31], 'ZA': [-30.55, 22.93], 'TW': [23.69, 120.96], 'IT': [41.87, 12.56], 'SE': [60.12, 18.64], 'CH': [46.81, 8.22], 'ES': [40.46, -3.74], 'PL': [51.91, 19.14], 'FI': [61.92, 25.74], 'NO': [60.47, 8.46], 'DK': [56.26, 9.50], 'IE': [53.14, -7.69], 'AT': [47.51, 14.55], 'TR': [38.96, 35.24], 'AE': [23.42, 53.84], 'MY': [4.21, 101.97], 'TH': [15.87, 100.99], 'VN': [14.05, 108.27], 'PH': [12.87, 121.77], 'ID': [-0.78, 113.92]};
+
+        createApp({
+            setup() {
+                const isLoggedIn = ref(false); const showLoginModal = ref(false); 
+                const loginUser = ref(''); const password = ref('');
+                const currentUser = ref(localStorage.getItem('myvps_user') || ''); const authKey = ref(localStorage.getItem('myvps_auth_key') || ''); const role = ref(localStorage.getItem('myvps_role') || '');
+                const activeTab = ref(localStorage.getItem('monitor_preferred_tab') || 'probe'); 
+                const currentDomain = window.location.origin;
+
+                const servers = ref([]); const nodes = ref([]); const users = ref([]);
+                const realtimeUrl = ref('');
+                const realtimeConnected = ref(false);
+                let realtimeSocket = null; let realtimeReconnectTimer = null; let realtimeFallbackTimer = null; let realtimeConnectTimer = null; let realtimePingTimer = null; let realtimeGeneration = 0; let realtimeDisconnectedAt = 0; let lastRealtimePing = 0; let realtimeRetryDelay = 5000;
+                let publicRealtimeSocket = null; let publicRealtimeReconnectTimer = null; let publicRealtimeFallbackTimer = null; let publicRealtimeConnectTimer = null; let publicRealtimeActivityTimer = null; let publicRealtimeDisconnectedAt = 0; let publicRealtimeRetryDelay = 10000;
+                const newVps = ref({ name: '', ip: '', os: 'debian' }); const newNodeParams = reactive({}); const newUser = reactive({ username: '', password: '', traffic_limit_gb: '', expire_date: '' });
+                const mySubToken = ref(''); const siteTitle = ref(''); const siteTitleInput = ref(''); const userNewPassword = ref('');
+                const batchStartPort = reactive({}); const batchUser = reactive({}); 
+                const thirdPartySubscriptions = ref([]); const newThirdParty = reactive({ name: '', url: '' }); const loadingThirdParty = ref(false);
+                
+                let initOsMap = {}; try { initOsMap = JSON.parse(localStorage.getItem('myvps_deploy_os') || '{}'); } catch(e) {}
+                const deployOsMap = reactive(initOsMap);
+
+                // --- 动态拉取核心 ---
+                const availableThemes = ref([
+                    { id: "theme1", name: "1. 默认清爽白 (Classic)", is_dark: false, css: "" },
+                    { id: "theme2", name: "2. 暗黑极客 (Dark)", is_dark: true, css: "" },
+                    { id: "theme3", name: "3. 新粗野主义 (Brutalism)", is_dark: false, css: "" },
+                    { id: "theme4", name: "4. 动态渐变毛玻璃 (Glass)", is_dark: true, css: "" },
+                    { id: "theme5", name: "5. 赛博朋克 (Cyberpunk)", is_dark: true, css: "" },
+                    { id: "theme6", name: "6. 完全自定义 CSS", is_dark: true, has_custom_css: true, css: "" }
+                ]);
+                const pingNodes = reactive({ ct: [], cu: [], cm: [] });
+
+                const probeSys = reactive({ theme: 'theme1', is_public: 'true', site_title: 'MyVps', custom_bg: '', custom_css: '', custom_head: '', custom_script: '', report_interval: '5', realtime_admin_interval: '5', realtime_public_interval: '10', realtime_idle_interval: '30', visits_total: '0', visits_today: '0', ping_node_ct: 'default', ping_node_cu: 'default', ping_node_cm: 'default', enable_popup: 'false', popup_content: '', tg_notify: 'false', tg_bot_token: '', tg_chat_id: '' });
+                const FALLBACK_DATA_INTERVAL = 15000;
+                const FALLBACK_PROBE_INTERVAL = 30000;
+                const FALLBACK_UI_PING_INTERVAL = 60000;
+                const publicProbeServers = ref([]);
+                const probeView = ref(localStorage.getItem('monitor_preferred_view') || 'card');
+                const probeDetailId = ref(null); const probeDetail = ref({});
+                let probeCharts = {};
+                const currentFilter = ref('all');
+
+                const adminProbeServers = ref([]);
+                const probeEditModalOpen = ref(false); const editingProbeNode = ref({});
+                
+                const qrModalOpen = ref(false);
+                const qrCodeImage = ref('');
+                
+                const showWelcomePopup = ref(false);
+
+                watch(activeTab, (val) => { localStorage.setItem('monitor_preferred_tab', val); if (val === 'settings' && isLoggedIn.value && role.value === 'admin') loadAdminProbeServers(); if (val === 'probe') { updateCustomStyles(); updateCustomScript(probeSys.custom_script); } else { document.body.className = ''; document.getElementById('myvps-custom-styles')?.remove(); document.getElementById('myvps-custom-head')?.remove(); updateCustomScript(''); } });
+                watch(probeView, (val) => localStorage.setItem('monitor_preferred_view', val));
+
+                const hasCustomCssFlag = computed(() => {
+                    const t = availableThemes.value.find(x => x.id === probeSys.theme);
+                    return t ? t.has_custom_css : false;
+                });
+
+                const parseCachedNodes = (dataStr) => {
+                    if (!dataStr) return;
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        if (parsed.themes && Array.isArray(parsed.themes)) availableThemes.value = parsed.themes;
+                        if (parsed.ct) pingNodes.ct = parsed.ct;
+                        if (parsed.cu) pingNodes.cu = parsed.cu;
+                        if (parsed.cm) pingNodes.cm = parsed.cm;
+                    } catch(e) {}
+                };
+
+                const themeCompatibilityCss = `
+/* MyVps compatibility layer for legacy cloud preset themes. */
+body.theme2 .probe-body, body.theme5 .probe-body, body.theme7 .probe-body, body.theme10 .probe-body, body.theme15 .probe-body, body.theme18 .probe-body { color: #e5e7eb; }
+body.theme8 .probe-body { color: #fff; }
+body.theme11, body.theme13, body.theme14, body.theme15, body.theme18 { position: relative; isolation: isolate; }
+body.theme11::before, body.theme13::before, body.theme14::before, body.theme15::before, body.theme18::before { z-index: 0 !important; }
+body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body.theme18 #app { position: relative; z-index: 1; }
+.theme2 .item-right-bag { border-top-color: #27272a !important; }
+.theme4 .global-stats, .theme12 .global-stats { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.theme4 .probe-header-card, .theme4 .probe-chart-card { background: rgba(255,255,255,.78) !important; color: #1d1d1f !important; }
+.theme5 .item-title { max-width: calc(100% + 2px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme7 .probe-header-card, .theme7 .probe-chart-card, .theme15 .probe-header-card, .theme15 .probe-chart-card, .theme18 .probe-header-card, .theme18 .probe-chart-card { background: rgba(10,10,12,.72) !important; border: 1px solid rgba(255,255,255,.12) !important; color: #fff !important; }
+.theme8 .ping-box { justify-content: center !important; }
+.theme8 .stat-subtext, .theme8 .item-sysinfo, .theme8 .item-speed { color: rgba(255,255,255,.82) !important; }
+.theme8 .probe-header-card, .theme8 .probe-chart-card { background: rgba(255,255,255,.16) !important; border-color: rgba(255,255,255,.3) !important; color: #fff !important; }
+.theme12 .card-meta-list, .theme13 .card-meta-list { display: contents !important; }
+.theme12 .probe-header-card, .theme12 .probe-chart-card { background: #fdfcf9 !important; border: 1px solid #eaddcf !important; box-shadow: 0 4px 6px rgba(0,0,0,.02) !important; color: #5d5449 !important; }
+.theme12 .item-sysinfo { grid-area: sysinfo; }
+.theme12 .item-meta-price, .theme12 .item-badges { display: none !important; }
+.theme12 .item-status.is-online { background: #6da183 !important; }
+.theme12 .item-status.is-offline { background: #d66b6b !important; }
+.theme12 .item-title.is-online::after { content: 'ONLINE' !important; color: #6da183 !important; }
+.theme12 .item-title.is-offline::after { content: 'OFFLINE' !important; color: #d66b6b !important; }
+.theme13 .item-ping { display: contents; }
+.theme13 .probe-header-card, .theme13 .probe-chart-card { background: rgba(255,255,255,.75) !important; border-color: rgba(255,255,255,.5) !important; color: #222 !important; }
+.theme14 .probe-header-card, .theme14 .probe-chart-card, .theme17 .probe-header-card, .theme17 .probe-chart-card { background: rgba(255,255,255,.7) !important; border: 1px solid rgba(255,255,255,.75) !important; color: #333 !important; }
+.theme16 .card-right { display: flex !important; flex-flow: row wrap !important; justify-content: center !important; }
+.theme16 .stat-group { flex: 0 1 30% !important; }
+.theme16 .probe-header-card, .theme16 .probe-chart-card { background: rgba(255,255,255,.88) !important; color: #111 !important; }
+.theme17 .card-meta-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #e5e7eb; }
+.theme17 .card-meta-list .card-meta { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+.theme18 .probe-card-meta, .theme18 .probe-stat-subtext, .theme18 .item-sysinfo, .theme18 .item-speed { color: rgba(230,255,239,.78) !important; }
+.theme15 .probe-info-label, .theme15 .info-value, .theme18 .probe-info-label, .theme18 .info-value { color: rgba(255,255,255,.82) !important; }
+@media (max-width: 640px) {
+  .theme4 .global-stats, .theme12 .global-stats { grid-template-columns: 1fr !important; }
+  .theme7 .vps-card { flex-direction: column !important; }
+  .theme7 .item-left-bag { flex: auto !important; width: 100% !important; margin: 0 0 8px !important; padding: 0 0 8px !important; border-right: 0 !important; border-bottom: 1px solid #333 !important; }
+  .theme7 .item-right-bag { width: 100% !important; display: flex !important; flex-direction: column !important; gap: 8px !important; }
+  .theme9 .vps-card { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .theme9 .item-right-bag { border-left: 0 !important; border-top: 2px solid #e9e9e7 !important; padding: 12px 0 0 !important; }
+  .theme10 .vps-card { flex-direction: column !important; }
+  .theme10 .item-left-bag { border-left: 0 !important; border-top: 2px dashed #8b6914 !important; padding: 12px 0 0 !important; }
+  .theme11 .vps-card { min-height: 0 !important; }
+  .theme11 .item-left-bag, .theme11 .item-right-bag { float: none !important; width: 100% !important; }
+  .theme11 .item-ping { position: static !important; width: auto !important; margin-top: 12px; }
+  .theme14 .card-right { grid-template-columns: 1fr !important; }
+  .theme16 .stat-group { flex-basis: 45% !important; }
+}
+`;
+
+                const updateCustomStyles = () => {
+                    if (isLoggedIn.value && activeTab.value !== 'probe') return;
+                    document.body.className = probeSys.theme || 'theme1';
+
+                    let styleTag = document.getElementById('myvps-custom-styles');
+                    if (!styleTag) { styleTag = document.createElement('style'); styleTag.id = 'myvps-custom-styles'; document.head.appendChild(styleTag); }
+                    
+                    const currentTheme = availableThemes.value.find(t => t.id === probeSys.theme) || availableThemes.value[0];
+                    let css = '';
+                    if (currentTheme && currentTheme.css) css += currentTheme.css + '\n';
+                    css += themeCompatibilityCss;
+                    
+                    if (probeSys.custom_css && (probeSys.theme === 'theme6' || (currentTheme && currentTheme.has_custom_css))) {
+                        css += probeSys.custom_css + '\n';
+                    }
+
+                    if (probeSys.custom_bg) css += `body { background: url('${probeSys.custom_bg}') no-repeat center center fixed !important; background-size: cover !important; } .probe-vps-card, .probe-global-stats, .probe-header-card, .probe-chart-card, .probe-custom-table, .probe-filter-tag, .probe-view-controls { background: rgba(255, 255, 255, 0.4) !important; backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important; border: 1px solid rgba(255, 255, 255, 0.6) !important; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1) !important; color: #111 !important; } .probe-vps-card:hover { background: rgba(255, 255, 255, 0.6) !important; transform: translateY(-3px); } .probe-group-header { color: #fff !important; text-shadow: 0 2px 5px rgba(0,0,0,0.6) !important; border-left-color: #fff !important; } .probe-g-val, .probe-card-title { color: #000 !important; font-weight: 800 !important; } .probe-g-label, .probe-g-sub, .probe-card-meta { color: #333 !important; font-weight: 600 !important; } .probe-stat-bar-full { background: rgba(0,0,0,0.1) !important; }`;
+                    styleTag.innerHTML = css;
+
+                    let headWrapper = document.getElementById('myvps-custom-head');
+                    if (probeSys.custom_head) {
+                        if (!headWrapper) { headWrapper = document.createElement('div'); headWrapper.id = 'myvps-custom-head'; document.head.appendChild(headWrapper); }
+                        headWrapper.innerHTML = probeSys.custom_head;
+                    } else if (headWrapper) headWrapper.remove();
+                };
+
+                const updateCustomScript = (newVal) => {
+                    document.querySelectorAll('[data-myvps-custom-script]').forEach(node => node.remove());
+                    let wrapper = document.getElementById('myvps-custom-html-wrapper');
+                    if (wrapper) wrapper.remove();
+                    if (isLoggedIn.value && activeTab.value !== 'probe') return;
+                    if (!newVal) return;
+                    wrapper = document.createElement('div'); wrapper.id = 'myvps-custom-html-wrapper'; wrapper.innerHTML = newVal; 
+                    const scripts = wrapper.getElementsByTagName('script');
+                    for (let i = 0; i < scripts.length; i++) {
+                        const newScript = document.createElement('script');
+                        newScript.dataset.myvpsCustomScript = 'true';
+                        if (scripts[i].src) newScript.src = scripts[i].src; else newScript.textContent = scripts[i].textContent;
+                        document.body.appendChild(newScript);
+                    }
+                    document.body.appendChild(wrapper);
+                };
+
+                watch(() => probeSys.theme, updateCustomStyles);
+                watch(() => probeSys.custom_css, updateCustomStyles);
+                watch(() => probeSys.custom_bg, updateCustomStyles);
+                watch(() => probeSys.custom_script, updateCustomScript);
+
+                const isOnline = (lastReport, realtimeState = '') => realtimeState ? realtimeState === 'online' : !!lastReport && (Date.now() - lastReport) < 1200000;
+                const formatBytes = (bytes) => { const b = parseInt(bytes); if (isNaN(b) || b === 0) return '0 B'; const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; };
+                const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const formatDate = (ts) => { if (!ts) return '永久'; const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+                const getExpireText = (dateStr) => { if(!dateStr) return '永久'; const d = new Date(dateStr).getTime(); if(isNaN(d)) return '永久'; const diff = d - Date.now(); return diff > 0 ? Math.ceil(diff/86400000) + '天' : '已过期'; };
+                const getTrafficPercent = (used, limit) => { if (!limit || limit === 0) return 0; return Math.min((used / limit) * 100, 100); };
+                const getPingColor = (ping) => { const p = parseInt(ping); if (p === 0 || isNaN(p)) return '#9ca3af'; if (p < 100) return '#10b981'; if (p < 200) return '#f59e0b'; return '#ef4444'; };
+
+                const globalOnline = computed(() => servers.value.filter(s => isOnline(s.last_report, s.realtime_state)).length);
+                const globalTraffic = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_rx || 0) + parseFloat(s.net_tx || 0)), 0));
+                const globalSpeedIn = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_in_speed) || 0), 0));
+                const globalSpeedOut = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_out_speed) || 0), 0));
+
+                const filteredProbeServers = computed(() => {
+                    if (currentFilter.value === 'all') return publicProbeServers.value;
+                    return publicProbeServers.value.filter(s => {
+                        let c = (s.country || 'xx').toUpperCase();
+                        if (c === 'TW') c = 'CN';
+                        return c === currentFilter.value;
+                    });
+                });
+
+                const probeGlobalOnline = computed(() => publicProbeServers.value.filter(s => isOnline(s.last_updated, s.realtime_state)).length);
+                const probeGlobalOffline = computed(() => publicProbeServers.value.length - probeGlobalOnline.value);
+                const probeGlobalSpeedIn = computed(() => publicProbeServers.value.reduce((sum, s) => sum + (parseFloat(s.net_in_speed)||0), 0));
+                const probeGlobalSpeedOut = computed(() => publicProbeServers.value.reduce((sum, s) => sum + (parseFloat(s.net_out_speed)||0), 0));
+                const probeGlobalNetRx = computed(() => publicProbeServers.value.reduce((sum, s) => sum + (parseFloat(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_rx' : 'net_rx'])||0), 0));
+                const probeGlobalNetTx = computed(() => publicProbeServers.value.reduce((sum, s) => sum + (parseFloat(s[probeSys.auto_reset_traffic === 'true' ? 'monthly_tx' : 'net_tx'])||0), 0));
+                
+                const filteredProbeGroups = computed(() => { 
+                    const groups = {}; 
+                    filteredProbeServers.value.forEach(s => { const g = s.server_group || '默认分组'; if(!groups[g]) groups[g] = []; groups[g].push(s); }); 
+                    return groups; 
+                });
+
+                const probeCountryStats = computed(() => { const stats = {}; publicProbeServers.value.forEach(s => { let code = (s.country || 'xx').toUpperCase(); if(code === 'TW') code = 'CN'; if(code !== 'XX') stats[code] = (stats[code] || 0) + 1; }); return stats; });
+
+                let authGeneration = 0;
+                const fetchApi = async (url, options = {}) => {
+                    const generation = authGeneration; const requestUser = currentUser.value; const requestKey = authKey.value;
+                    options.headers = { ...options.headers, 'Authorization': `Bearer ${requestKey}` };
+                    const res = await fetch(url, options);
+                    if (generation !== authGeneration || requestUser !== currentUser.value) throw new Error('Stale session response');
+                    if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
+                    if (!res.ok) {
+                        const raw = await res.text();
+                        let message = raw || `HTTP ${res.status}`;
+                        try { const err = JSON.parse(raw); message = err.error || err.message || message; } catch (e) {}
+                        alert(`❌ 后端报错: ${message.substring(0, 300)}`);
+                        throw new Error(message);
+                    }
+                    if (options.method && options.method !== 'GET' && (/^\/api\/(vps|config)/.test(url))) {
+                        let targetIp = '';
+                        try { targetIp = JSON.parse(options.body || '{}').ip || new URL(url, location.origin).searchParams.get('ip') || ''; } catch(e) {}
+                        queueMicrotask(() => notifyRealtime(targetIp));
+                    }
+                    return res;
+                };
+                window.myvpsAdminAuthHeader = async () => {
+                    if (!authKey.value || !currentUser.value || role.value !== 'admin') return {};
+                    return { 'Authorization': `Bearer ${authKey.value}` };
+                };
+                window.myvpsManagedServerIps = () => servers.value.map(server => server.ip).filter(Boolean);
+
+                const login = async () => {
+                    if (!loginUser.value) loginUser.value = 'admin';
+                    try {
+                        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUser.value, password: password.value }) });
+                        if (res.ok) {
+                            authGeneration++;
+                            const data = await res.json(); authKey.value = data.token; currentUser.value = loginUser.value; role.value = data.role;
+                            localStorage.setItem('myvps_auth_key', authKey.value); localStorage.setItem('myvps_user', currentUser.value); localStorage.setItem('myvps_role', role.value);
+                            isLoggedIn.value = true; showLoginModal.value = false; password.value = ''; const publicSocket = publicRealtimeSocket; publicRealtimeSocket = null; publicSocket?.close(); clearTimeout(publicRealtimeReconnectTimer); clearTimeout(publicRealtimeFallbackTimer); clearInterval(publicRealtimeActivityTimer);
+                            activeTab.value = role.value === 'admin' ? 'nodes' : 'probe';
+                            startPolling(); fetchProbeData(); queueMicrotask(connectRealtime);
+                        } else alert('⚠️ 账户名或密码错误');
+                    } catch (e) { alert('登录异常'); }
+                };
+                
+                const clearPrivateState = () => { servers.value = []; nodes.value = []; users.value = []; adminProbeServers.value = []; mySubToken.value = ''; probeDetailId.value = null; probeDetail.value = {};  };
+                const logout = () => { authGeneration++; localStorage.removeItem('myvps_auth_key'); localStorage.removeItem('myvps_user'); localStorage.removeItem('myvps_role'); isLoggedIn.value = false; currentUser.value = ''; authKey.value = ''; clearPrivateState(); activeTab.value = 'probe'; realtimeGeneration++; realtimeDisconnectedAt = 0; clearTimeout(realtimeFallbackTimer); clearTimeout(realtimeReconnectTimer); clearTimeout(realtimeConnectTimer); clearInterval(realtimePingTimer); const socket = realtimeSocket; realtimeSocket = null; socket?.close(); realtimeConnected.value = false; window.myvpsRealtimeConnected = false; stopPolling(); startProbePolling();};
+                const sendUiPing = async () => { try { await fetchApi('/api/ui_ping', { method: 'POST' }); } catch(e) {} };
+
+                let mapInitialized = false; let myMap = null; let markersLayer = null; let geoJsonLayer = null; let worldGeoJson = null; let currentMapDataStr = "";
+                const initMap = async () => {
+                    if (myMap) return;
+                    myMap = L.map('map-container', { zoomControl: true, attributionControl: false, minZoom: 1 }).setView([30, 10], 2);
+                    try { const res = await fetch('https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json'); worldGeoJson = await res.json(); drawMarkers(); } catch (e) {}
+                };
+                const drawMarkers = () => {
+                    if(!myMap || !worldGeoJson) return;
+                    const newDataStr = JSON.stringify(probeCountryStats.value);
+                    if (currentMapDataStr === newDataStr) return; currentMapDataStr = newDataStr;
+                    if(geoJsonLayer) myMap.removeLayer(geoJsonLayer); if(markersLayer) markersLayer.clearLayers(); else markersLayer = L.layerGroup().addTo(myMap);
+                    const activeTheme = availableThemes.value.find(theme => theme.id === probeSys.theme);
+                    const isDark = Boolean(activeTheme?.is_dark);
+                    const activeIso3 = {}; for (const code in probeCountryStats.value) { if (iso2To3[code]) activeIso3[iso2To3[code]] = true; }
+                    
+                    if (activeIso3['CHN'] || activeIso3['TWN'] || activeIso3['HKG'] || activeIso3['MAC']) {
+                        activeIso3['CHN'] = true; activeIso3['TWN'] = true; activeIso3['HKG'] = true; activeIso3['MAC'] = true;
+                    }
+                    geoJsonLayer = L.geoJSON(worldGeoJson, { style: function(feature) { const isActive = activeIso3[feature.id]; return { fillColor: isActive ? '#10b981' : (isDark ? '#2a303c' : '#d5dce2'), weight: 1, opacity: 1, color: isDark ? '#1a202c' : '#ffffff', fillOpacity: 1 }; } }).addTo(myMap);
+                    for (const [code, count] of Object.entries(probeCountryStats.value)) { if(countryCoords[code]) { const icon = L.divIcon({ className: 'probe-custom-map-badge', html: `<div>${count}</div>`, iconSize: [22,22] }); L.marker(countryCoords[code], {icon: icon}).addTo(markersLayer); } }
+                };
+
+                const setProbeView = (view) => { probeView.value = view; if(view === 'map') { nextTick(()=>{ if(!mapInitialized){initMap(); mapInitialized=true;} else myMap.invalidateSize(); drawMarkers(); }); } };
+
+                const initProbeDetailCharts = () => {
+                    const commonOptions = { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { beginAtZero: true, border: { display: false } } }, plugins: { legend: { display: false }, tooltip: { enabled: false } }, elements: { point: { radius: 0 }, line: { tension: 0.4, borderWidth: 2 } } };
+                    const pingOptions = { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: true, ticks: { maxTicksLimit: 15, color: '#9ca3af', font: { size: 10 } } }, y: { beginAtZero: true, border: { display: false } } }, plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { enabled: true, mode: 'index', intersect: false } }, elements: { point: { radius: 0, hitRadius: 10, hoverRadius: 4 }, line: { tension: 0.3, borderWidth: 2 } } };
+                    const createChart = (ctxId, color, bgColor) => new Chart(document.getElementById(ctxId).getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: color, backgroundColor: bgColor, fill: true }] }, options: commonOptions });
+                    if(probeCharts.cpu) { Object.values(probeCharts).forEach(c=>c.destroy()); }
+                    probeCharts.cpu = createChart('probeChartCPU', '#3b82f6', 'rgba(59, 130, 246, 0.1)');
+                    probeCharts.ram = createChart('probeChartRAM', '#8b5cf6', 'rgba(139, 92, 246, 0.1)');
+                    probeCharts.proc = createChart('probeChartProc', '#ec4899', 'rgba(236, 72, 153, 0.1)');
+                    probeCharts.net = new Chart(document.getElementById('probeChartNet').getContext('2d'), { type: 'line', data: { labels: [], datasets: [ { label: 'In', data: [], borderColor: '#10b981', borderWidth: 2, tension: 0.4, pointRadius: 0 }, { label: 'Out', data: [], borderColor: '#3b82f6', borderWidth: 2, tension: 0.4, pointRadius: 0 } ]}, options: commonOptions });
+                    probeCharts.conn = new Chart(document.getElementById('probeChartConn').getContext('2d'), { type: 'line', data: { labels: [], datasets: [ { label: 'TCP', data: [], borderColor: '#6366f1', borderWidth: 2, tension: 0.4, pointRadius: 0 }, { label: 'UDP', data: [], borderColor: '#d946ef', borderWidth: 2, tension: 0.4, pointRadius: 0 } ]}, options: commonOptions });
+                    probeCharts.ping = new Chart(document.getElementById('probeChartPing').getContext('2d'), { type: 'line', data: { labels: [], datasets: [ { label: '电信', data: [], borderColor: '#10b981', backgroundColor: 'transparent' }, { label: '联通', data: [], borderColor: '#f59e0b', backgroundColor: 'transparent' }, { label: '移动', data: [], borderColor: '#3b82f6', backgroundColor: 'transparent' }, { label: '字节', data: [], borderColor: '#8b5cf6', backgroundColor: 'transparent' } ] }, options: pingOptions });
+                };
+
+                const updateProbeDetailCharts = (data) => {
+                    let hist = {}; try { if(data.history) hist = JSON.parse(data.history); } catch(e) {}
+                    if (hist.time && hist.time.length > 0 && probeCharts.cpu) {
+                        const nowTime = new Date(); const timeLabel = nowTime.getHours().toString().padStart(2, '0') + ':' + String(nowTime.getMinutes()).padStart(2, '0');
+                        const rtLabels = [...hist.time, timeLabel];
+                        const updateChartSync = (chart, histArray, rtValue) => { chart.data.labels = rtLabels; chart.data.datasets[0].data = histArray ? [...histArray, rtValue] : []; chart.update('none'); };
+                        const updateMultiChartSync = (chart, histArrays, rtValues) => { chart.data.labels = rtLabels; histArrays.forEach((hArr, i) => { chart.data.datasets[i].data = hArr ? [...hArr, rtValues[i]] : []; }); chart.update('none'); };
+                        updateChartSync(probeCharts.cpu, hist.cpu, parseFloat(data.cpu) || 0); updateChartSync(probeCharts.ram, hist.ram, parseFloat(data.ram) || 0); updateChartSync(probeCharts.proc, hist.proc, parseInt(data.processes) || 0);
+                        updateMultiChartSync(probeCharts.net, [hist.net_in, hist.net_out], [parseFloat(data.net_in_speed) || 0, parseFloat(data.net_out_speed) || 0]);
+                        updateMultiChartSync(probeCharts.conn, [hist.tcp, hist.udp], [parseInt(data.tcp_conn) || 0, parseInt(data.udp_conn) || 0]);
+                        updateMultiChartSync(probeCharts.ping, [hist.ping_ct, hist.ping_cu, hist.ping_cm, hist.ping_bd], [parseInt(data.ping_ct) || 0, parseInt(data.ping_cu) || 0, parseInt(data.ping_cm) || 0, parseInt(data.ping_bd) || 0]);
+                    }
+                };
+
+                const openProbeDetail = async (id) => { probeDetailId.value = id; await nextTick(); initProbeDetailCharts(); fetchProbeData(true); };
+
+                const closePopup = () => {
+                    localStorage.setItem('myvps_popup_seen', Date.now().toString());
+                    showWelcomePopup.value = false;
+                };
+
+                // --- GitHub 动态拉取 ---
+                const pullGithubNodes = async () => {
+                    try {
+                        const res = await fetchApi('/api/probe/admin/pull_github', { method: 'POST' });
+                        if (res.ok) {
+                            alert('✅ 云端主题与测速节点数据拉取成功！');
+                            refreshData(); fetchProbeData();
+                        }
+                    } catch(e) { alert('拉取失败: ' + e); }
+                };
+
+                let isFirstLoad = true;
+                let isFetchingProbe = false;
+                let probeDetailRequestGeneration = 0;
+                const fetchProbeData = async (isDetail = false) => {
+                    const detailRequest = !!probeDetailId.value;
+                    if (!detailRequest && isFetchingProbe) return;
+                    if (!detailRequest) isFetchingProbe = true;
+                    try {
+                        let authHeader = {};
+                        if (isLoggedIn.value) authHeader = { 'Authorization': `Bearer ${authKey.value}` };
+                        
+                        if (probeDetailId.value) {
+                            const requestedId = probeDetailId.value;
+                            const generation = ++probeDetailRequestGeneration;
+                            const res = await fetch(`/api/probe/detail?id=${encodeURIComponent(requestedId)}`, {headers: authHeader});
+                            if(!res.ok) { if (probeDetailId.value === requestedId && generation === probeDetailRequestGeneration) probeDetailId.value = null; throw new Error("Detail fetch failed"); }
+                            const detail = await res.json();
+                            if (probeDetailId.value !== requestedId || generation !== probeDetailRequestGeneration) return;
+                            const live = normalizeRealtimeKey(probeDetail.value?.id) === normalizeRealtimeKey(requestedId) ? probeDetail.value : null;
+                            probeDetail.value = live && Number(live._realtime_ts || 0) > Number(detail.last_updated || 0) ? { ...detail, ...live } : detail;
+                            updateProbeDetailCharts(probeDetail.value);
+                        } else {
+                            const ajaxParam = isFirstLoad ? '' : '?ajax=1';
+                            isFirstLoad = false;
+                            const res = await fetch(`/api/probe/public${ajaxParam}`, {headers: authHeader});
+                            if (!res.ok) { if(res.status===401) showLoginModal.value = true; throw new Error("Private Dashboard"); }
+                            const data = await res.json(); 
+                            Object.assign(probeSys, data.settings); 
+                            if (data.settings.cached_nodes_data) parseCachedNodes(data.settings.cached_nodes_data);
+                            const liveByIp = new Map(publicProbeServers.value.filter(item => item._realtime_ts).map(item => [normalizeRealtimeKey(item.id), item]));
+                            publicProbeServers.value = (data.servers || []).map(item => {
+                                const live = liveByIp.get(normalizeRealtimeKey(item.id));
+                                return live && live._realtime_ts > Number(item.last_updated || 0) ? { ...item, ...live } : item;
+                            });
+                            if (data.realtime_url && data.realtime_url !== realtimeUrl.value) realtimeUrl.value = data.realtime_url;
+                            // A logged-in admin must use the Dashboard channel even
+                            // while viewing the probe page. Re-check after every
+                            // probe load to avoid the login/realtime URL race.
+                            if (isLoggedIn.value && role.value === 'admin' && realtimeUrl.value) queueMicrotask(connectRealtime);
+                            else if (!isLoggedIn.value && data.settings.is_public === 'true') queueMicrotask(connectPublicRealtime);
+                            updateCustomStyles();
+                            if ((!isLoggedIn.value || activeTab.value === 'probe') && probeSys.custom_script && !document.getElementById('myvps-custom-html-wrapper')) updateCustomScript(probeSys.custom_script);
+                            if (probeView.value === 'map') drawMarkers();
+                            if (probeSys.is_public !== 'true' && !isLoggedIn.value) showLoginModal.value = true;
+                            
+                            // 弹窗逻辑
+                            if (probeSys.enable_popup === 'true') {
+                                const lastSeen = localStorage.getItem('myvps_popup_seen');
+                                if (!lastSeen || Date.now() - parseInt(lastSeen) > 86400000) showWelcomePopup.value = true;
+                            }
+                        }
+                    } catch(e) {} finally { if (!detailRequest) isFetchingProbe = false; }
+                };
+
+                let isFetchingMyVps = false;
+                let isLoadingAdminProbeServers = false;
+                const loadAdminProbeServers = async () => {
+                    if (isLoadingAdminProbeServers || !isLoggedIn.value || role.value !== 'admin') return;
+                    isLoadingAdminProbeServers = true;
+                    try {
+                        const probeRes = await fetchApi('/api/probe/admin/data');
+                        if (!probeRes.ok) throw new Error(`Probe data request failed: ${probeRes.status}`);
+                        const probeData = await probeRes.json();
+                        Object.assign(probeSys, probeData.settings || {});
+                        if (probeData.settings?.cached_nodes_data) parseCachedNodes(probeData.settings.cached_nodes_data);
+                        adminProbeServers.value = probeData.servers || [];
+                    } catch (error) {
+                        console.error('[settings] failed to load probe servers', error);
+                    } finally {
+                        isLoadingAdminProbeServers = false;
+                    }
+                };
+                const refreshData = async () => {
+                    if (isFetchingMyVps) return; isFetchingMyVps = true;
+                    try {
+                        const res = await fetchApi('/api/data'); const data = await res.json();
+                        const liveByIp = new Map(servers.value.filter(item => item._realtime_ts).map(item => [normalizeRealtimeKey(item.ip), item]));
+                        servers.value = (data.servers || []).map(item => { const live = liveByIp.get(normalizeRealtimeKey(item.ip)); return live && live._realtime_ts > Number(item.last_report || 0) ? { ...item, ...live } : item; }); nodes.value = data.nodes || []; users.value = data.users || [];
+                        if (data.siteTitle) { siteTitle.value = data.siteTitle; siteTitleInput.value = data.siteTitle; }
+                        if (data.mySubToken) mySubToken.value = data.mySubToken;
+                        if (data.realtimeUrl && data.realtimeUrl !== realtimeUrl.value) { realtimeUrl.value = data.realtimeUrl; connectRealtime(); }
+                        servers.value.forEach(s => {
+                            if(!deployOsMap[s.ip]) deployOsMap[s.ip] = 'debian'; if(!batchStartPort[s.ip]) batchStartPort[s.ip] = ''; if(!batchUser[s.ip]) batchUser[s.ip] = 'admin';
+                        });
+                    if (activeTab.value === 'nodes') renderMyVpsCharts();
+                    
+                    
+                    
+                    if (activeTab.value === 'settings' && role.value === 'admin') loadAdminProbeServers();
+                    } catch(e) {} finally { isFetchingMyVps = false; }
+                };
+
+                const renderMyVpsCharts = async () => {
+                    await nextTick();
+                    for (let vps of servers.value) {
+                        const chartDom = document.getElementById('chart-' + vps.ip); if (!chartDom) continue;
+                        let myChart = echarts.getInstanceByDom(chartDom) || echarts.init(chartDom);
+                        const res = await fetchApi(`/api/stats?ip=${vps.ip}`); const stats = await res.json();
+                        myChart.setOption({ grid: { left: '8%', right: '5%', top: '5%', bottom: '15%' }, tooltip: { trigger: 'axis', backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: '#e2e8f0', textStyle: { color: '#334155' } }, xAxis: { type: 'category', data: stats.map(s=>s.day), axisLabel: { color: '#94a3b8', fontSize: 10 }, axisLine: { lineStyle: { color: '#cbd5e1' } } }, yAxis: { type: 'value', show: false }, series: [{ data: stats.map(s=>(s.total_bytes/1024/1024).toFixed(2)), type: 'line', smooth: true, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(99, 102, 241, 0.2)' }, { offset: 1, color: 'rgba(99, 102, 241, 0)' }]) }, itemStyle: { color: '#6366f1' }, lineStyle: { width: 3 }, symbol: 'none' }] });
+                    }
+                };
+
+                const generateUUIDForNewUser = () => { newUser.password = crypto.randomUUID(); };
+                const expiryTimestamp = (date) => date ? new Date(`${date}T23:59:59.999`).getTime() : 0;
+                const addUser = async () => { const username = String(newUser.username || '').trim(); if (!/^[A-Za-z0-9_.-]{1,64}$/.test(username) || username === loginUser.value || username.toLowerCase() === 'admin') return alert('用户名仅允许字母、数字、点、横线和下划线，且不能使用管理员名'); if (!newUser.password || newUser.password.length < 8) return alert('密码至少 8 位'); const limit = newUser.traffic_limit_gb ? Math.floor(parseFloat(newUser.traffic_limit_gb) * 1073741824) : 0; const expire = expiryTimestamp(newUser.expire_date); await fetchApi('/api/users', { method: 'POST', body: JSON.stringify({ ...newUser, username, traffic_limit: limit, expire_time: expire }) }); Object.assign(newUser, { username: '', password: '', traffic_limit_gb: '', expire_date: '' }); refreshData(); };
+                const toggleUser = async (username, status) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username, enable: status }) }); refreshData(); };
+                const deleteUser = async (username) => { if(confirm('⚠️ 确定删除用户？节点将归还给管理员。')) { await fetchApi(`/api/users?username=${username}`, { method: 'DELETE' }); refreshData(); } };
+                const resetUserTraffic = async (username) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username, reset_traffic: true }) }); refreshData(); };
+                const addVps = async () => { if(!newVps.value.ip || !newVps.value.name) return alert('请输入名称和IP'); deployOsMap[newVps.value.ip] = newVps.value.os; saveOsMap(); await fetchApi('/api/vps', { method: 'POST', body: JSON.stringify({ ip: newVps.value.ip, name: newVps.value.name }) }); newVps.value = { name: '', ip: '', os: 'debian' }; refreshData(); fetchProbeData();};
+                const deleteVps = async (ip) => { if(confirm('🧨 确定移除该机器？该机器相关的探针数据、节点数据将被完全清空！')) { await fetchApi(`/api/vps?ip=${ip}`, { method: 'DELETE' }); refreshData(); fetchProbeData();} };
+                const getNodesByIp = (ip) => [];
+                const getVpsName = (ip) => servers.value.find(s => s.ip === ip)?.name || ip;
+                
+                const saveOsMap = () => { localStorage.setItem('myvps_deploy_os', JSON.stringify(deployOsMap)); };
+                const generateCmd = (ip) => { const osType = deployOsMap[ip] || 'debian'; const token = servers.value.find(s => s.ip === ip)?.agent_token || ''; if (!token) return '请先刷新页面以签发独立 Agent Token'; const scriptUrl = `${currentDomain}/api/agent_update?ip=${encodeURIComponent(ip)}&component=full-installer`; if (osType === 'alpine') return `apk update && apk add curl && curl -fsSL -H "Authorization: ${token}" "${scriptUrl}" | sh -s -- --api "${currentDomain}" --ip "${ip}" --token "${token}"`; else return `apt-get update -y && apt-get install -y curl && bash <(curl -fsSL -H "Authorization: ${token}" "${scriptUrl}") --api "${currentDomain}" --ip "${ip}" --token "${token}"`; };
+
+                const saveSiteTitle = async () => { if(!siteTitleInput.value) return alert('名称不能为空！'); await fetchApi('/api/settings', { method: 'POST', body: JSON.stringify({ site_title: siteTitleInput.value }) }); siteTitle.value = siteTitleInput.value; alert('✅ MyVps 面板名称保存成功！'); };
+                const updateUserPassword = async () => { if(!userNewPassword.value) return alert('请输入新密码'); await fetchApi('/api/user/password', { method: 'PUT', body: JSON.stringify({ password: userNewPassword.value }) }); alert('✅ 密码修改成功！请使用新密码重新登录。'); logout(); };
+                const resetMySubLink = async () => {};
+                const generateSubLink = () => '';
+                const copyCommand = (txt, msg) => navigator.clipboard.writeText(txt).then(() => alert(msg));
+                const showQrCode = () => {};
+
+                const saveProbeSettings = async () => { await fetchApi('/api/probe/admin/settings', { method: 'POST', body: JSON.stringify({settings: probeSys}) }); if (realtimeUrl.value) { try { const headers = await window.myvpsAdminAuthHeader(); await fetch(`${realtimeUrl.value}/public-policy`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ public: probeSys.is_public === 'true' }) }); } catch(e) {} } alert('✅ 探针大盘配置已生效！如果配置了TG参数已自动绑定Webhook。'); refreshData(); fetchProbeData(); };
+                                const openProbeEditModal = (s) => { editingProbeNode.value = JSON.parse(JSON.stringify(s)); if(!editingProbeNode.value.is_hidden) editingProbeNode.value.is_hidden = 'false'; if(!editingProbeNode.value.reset_day) editingProbeNode.value.reset_day = '1'; probeEditModalOpen.value = true; };
+                const saveProbeEdit = async () => { await fetchApi('/api/probe/admin/server', { method: 'PUT', body: JSON.stringify(editingProbeNode.value) }); probeEditModalOpen.value = false; refreshData(); fetchProbeData(); };
+                const deleteProbeNode = async (id) => { if (!confirm("⚠️ 确定要彻底删除该探针记录吗？如果机器还在运行 Agent，之后会自动复活！请确保先在面板的「服务器与节点」中删除此机器。")) return; await fetchApi(`/api/probe/admin/server?id=${id}`, { method: 'DELETE' }); refreshData(); fetchProbeData(); };
+                
+                const loadThirdPartySubscriptions = async () => {};
+                const addThirdPartySubscription = async () => {};
+                const toggleThirdPartySubscription = async () => {};
+                const deleteThirdPartySubscription = async () => {};
+                const normalizeRealtimeKey = value => String(value || '').trim().replace(/^\[|\]$/g, '').toLowerCase();
+                const applyRealtimeSnapshot = (snapshot) => {
+                    if (!snapshot?.ip) return;
+                    const key = normalizeRealtimeKey(snapshot.ip);
+                    const resultServer = servers.value.find(item => normalizeRealtimeKey(item.ip) === key);
+                    const egressResult = snapshot.core_egress_result || snapshot.core_config_result;
+                    if (resultServer && egressResult?.component === 'egress' && Number(egressResult.revision) === Number(resultServer.egress_revision)) { resultServer.egress_status = egressResult.success ? 'applied' : 'failed'; resultServer.egress_applied_mode = egressResult.applied_mode; resultServer.egress_error = egressResult.error || ''; if (resultServer.egress_status === 'applied') resultServer.egress_applied_revision = egressResult.revision; if (egressResult.egress_ip) resultServer.egress_ip = egressResult.egress_ip; }
+                    if (snapshot.core) {
+                        const timestamp = Number(snapshot.core_last_seen || snapshot.updated_at || 0);
+                        const server = servers.value.find(item => normalizeRealtimeKey(item.ip) === key);
+                        if (server && timestamp >= Number(server._realtime_ts || server.last_report || 0)) {
+                            const core = snapshot.core;
+                            Object.assign(server, { cpu: core.cpu, mem: core.mem, disk: core.disk, load: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_report: timestamp, realtime_state: snapshot.core_state, boot_id: snapshot.boot_id?.core, sequence: snapshot.sequence?.core, config_result: snapshot.core_config_result, config_result_at: snapshot.core_config_result_at, _realtime_ts: timestamp });
+                        }
+                        const core = snapshot.core;
+                        const probe = publicProbeServers.value.find(item => normalizeRealtimeKey(item.id) === key);
+                        if (probe && timestamp >= Number(probe._realtime_ts || probe.last_updated || 0)) Object.assign(probe, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp });
+                        if (normalizeRealtimeKey(probeDetail.value?.id) === key && timestamp >= Number(probeDetail.value?._realtime_ts || probeDetail.value?.last_updated || 0)) { Object.assign(probeDetail.value, { cpu: core.cpu, ram: core.mem, disk: core.disk, load_avg: core.load, uptime: core.uptime, net_in_speed: core.net_in_speed, net_out_speed: core.net_out_speed, tcp_conn: core.tcp_conn, udp_conn: core.udp_conn, last_updated: timestamp, realtime_state: snapshot.core_state, _realtime_ts: timestamp }); updateProbeDetailCharts(probeDetail.value); }
+                    }
+                    
+                };
+                const scheduleRealtimeFallback = () => {
+                    clearTimeout(realtimeFallbackTimer);
+                    if (!realtimeDisconnectedAt) realtimeDisconnectedAt = Date.now();
+                    const remaining = Math.max(0, 30000 - (Date.now() - realtimeDisconnectedAt));
+                    realtimeFallbackTimer = setTimeout(() => { if (!document.hidden && !realtimeConnected.value && isLoggedIn.value) { stopPolling(); startPolling(); startProbePolling();  } }, remaining);
+                };
+                const connectRealtime = async () => {
+                    if (!isLoggedIn.value || role.value !== 'admin' || !realtimeUrl.value || document.hidden) return;
+                    if (realtimeSocket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(realtimeSocket.readyState)) return;
+                    const generation = ++realtimeGeneration;
+                    scheduleRealtimeFallback();
+                    try {
+                        const authHeaders = await window.myvpsAdminAuthHeader();
+                        const ticketController = new AbortController();
+                        const ticketTimeout = setTimeout(() => ticketController.abort(), 30000);
+                        const ticketRes = await fetch(`${realtimeUrl.value}/dashboard/ticket`, { method: 'POST', headers: authHeaders, signal: ticketController.signal }).finally(() => clearTimeout(ticketTimeout));
+                        if (!ticketRes.ok) throw new Error(`ticket ${ticketRes.status}`);
+                        const { ticket } = await ticketRes.json();
+                        if (generation !== realtimeGeneration || !isLoggedIn.value || role.value !== 'admin' || document.hidden) return;
+                        const wsUrl = realtimeUrl.value.replace(/^http/, 'ws') + `/dashboard/ws?ticket=${encodeURIComponent(ticket)}`;
+                        const socket = new WebSocket(wsUrl);
+                        realtimeSocket = socket;
+                        clearTimeout(realtimeConnectTimer);
+                        realtimeConnectTimer = setTimeout(() => { if (realtimeSocket === socket && socket.readyState === WebSocket.CONNECTING) socket.close(); }, 30000);
+                        socket.onopen = () => { if (realtimeSocket !== socket || generation !== realtimeGeneration) return socket.close(); clearTimeout(realtimeConnectTimer); realtimeDisconnectedAt = 0; realtimeRetryDelay = 5000; lastRealtimePing = Date.now(); realtimeConnected.value = true; window.myvpsRealtimeConnected = true; clearTimeout(realtimeFallbackTimer); publicRealtimeSocket?.close(); refreshData(); stopPolling(); stopProbePolling();  clearInterval(realtimePingTimer); realtimePingTimer = setInterval(() => { const now = Date.now(); if (realtimeSocket?.readyState === WebSocket.OPEN && now - lastRealtimePing >= 30000) { realtimeSocket.send('ping'); lastRealtimePing = now; } servers.value.forEach(server => { if (server.realtime_state === 'online' && now - server.last_report > 20000) server.realtime_state = 'stale'; }); publicProbeServers.value.forEach(server => { if (server.realtime_state === 'online' && server.last_updated && now - server.last_updated > 20000) server.realtime_state = 'stale'; });  }, 5000); };
+                        socket.onmessage = event => { if (realtimeSocket !== socket) return; try { const message = JSON.parse(event.data); if (message.type === 'snapshot') (message.data || []).forEach(applyRealtimeSnapshot); else if (message.type === 'patch') applyRealtimeSnapshot(message.data); } catch(e) {} };
+                        socket.onclose = () => { if (realtimeSocket !== socket) return; clearTimeout(realtimeConnectTimer); clearInterval(realtimePingTimer); realtimeConnected.value = false; window.myvpsRealtimeConnected = false; realtimeSocket = null; if (isLoggedIn.value && !document.hidden) { scheduleRealtimeFallback(); clearTimeout(realtimeReconnectTimer); const delay = realtimeRetryDelay; realtimeRetryDelay = Math.min(realtimeRetryDelay * 2, 60000); realtimeReconnectTimer = setTimeout(connectRealtime, delay); } };
+                        socket.onerror = () => socket.close();
+                    } catch(e) { if (generation !== realtimeGeneration) return; scheduleRealtimeFallback(); clearTimeout(realtimeReconnectTimer); const delay = realtimeRetryDelay; realtimeRetryDelay = Math.min(realtimeRetryDelay * 2, 60000); realtimeReconnectTimer = setTimeout(connectRealtime, delay); }
+                };
+                const connectPublicRealtime = () => {
+                    if (isLoggedIn.value || !realtimeUrl.value || probeSys.is_public !== 'true' || document.hidden) return;
+                    if (publicRealtimeSocket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(publicRealtimeSocket.readyState)) return;
+                    const socket = new WebSocket(realtimeUrl.value.replace(/^http/, 'ws') + '/public/ws');
+                    publicRealtimeSocket = socket;
+                    clearTimeout(publicRealtimeConnectTimer);
+                    publicRealtimeConnectTimer = setTimeout(() => { if (publicRealtimeSocket === socket && socket.readyState === WebSocket.CONNECTING) socket.close(); }, 30000);
+                    socket.onopen = () => { if (publicRealtimeSocket !== socket) return socket.close(); clearTimeout(publicRealtimeConnectTimer); publicRealtimeDisconnectedAt = 0; publicRealtimeRetryDelay = 10000; clearTimeout(publicRealtimeFallbackTimer); stopProbePolling(); clearInterval(publicRealtimeActivityTimer); socket.send(JSON.stringify({ type: 'activity' })); publicRealtimeActivityTimer = setInterval(() => { if (publicRealtimeSocket === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'activity' })); }, 30000); };
+                    socket.onmessage = event => { if (publicRealtimeSocket !== socket) return; try { const message = JSON.parse(event.data); if (message.type === 'snapshot') (message.data || []).forEach(applyRealtimeSnapshot); else if (message.type === 'patch') applyRealtimeSnapshot(message.data); } catch(e) {} };
+                    socket.onclose = event => { if (publicRealtimeSocket !== socket) return; clearTimeout(publicRealtimeConnectTimer); publicRealtimeSocket = null; clearInterval(publicRealtimeActivityTimer); if (event.code === 1008) { clearTimeout(publicRealtimeReconnectTimer); stopProbePolling(); publicProbeServers.value = []; probeSys.is_public = 'false'; return; } if (!publicRealtimeDisconnectedAt) publicRealtimeDisconnectedAt = Date.now(); clearTimeout(publicRealtimeFallbackTimer); publicRealtimeFallbackTimer = setTimeout(() => { if (!document.hidden && !isLoggedIn.value) startProbePolling(); }, Math.max(0, 30000 - (Date.now() - publicRealtimeDisconnectedAt))); clearTimeout(publicRealtimeReconnectTimer); const delay = publicRealtimeRetryDelay; publicRealtimeRetryDelay = Math.min(publicRealtimeRetryDelay * 2, 60000); publicRealtimeReconnectTimer = setTimeout(connectPublicRealtime, delay); };
+                    socket.onerror = () => socket.close();
+                };
+                const notifyRealtime = async (ip = '') => { if (!realtimeUrl.value || role.value !== 'admin') return; try { const headers = await window.myvpsAdminAuthHeader(); await fetch(`${realtimeUrl.value}/notify`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(ip ? { ip } : {}) }); } catch(e) {} };
+                window.myvpsNotifyRealtime = notifyRealtime;
+                const startPolling = () => { 
+                    if (realtimeConnected.value) return;
+                    if (!dataTimer) { refreshData(); dataTimer = setInterval(() => { if (isLoggedIn.value && !document.hidden && activeTab.value !== 'probe') refreshData(); }, FALLBACK_DATA_INTERVAL); }
+                    if (!pingTimer) { sendUiPing(); pingTimer = setInterval(() => { if (isLoggedIn.value && !document.hidden) sendUiPing(); }, FALLBACK_UI_PING_INTERVAL); }
+                };
+                const startProbePolling = () => { 
+                    if ((realtimeConnected.value && isLoggedIn.value && role.value === 'admin') || publicRealtimeSocket?.readyState === WebSocket.OPEN) return;
+                    if (!probeTimer) { fetchProbeData(); probeTimer = setInterval(() => { if (!document.hidden && (!isLoggedIn.value || activeTab.value === 'probe')) fetchProbeData(); }, FALLBACK_PROBE_INTERVAL); }
+                }
+                const stopProbePolling = () => { if (probeTimer) { clearInterval(probeTimer); probeTimer = null; } };
+                const stopPolling = () => { if (dataTimer) { clearInterval(dataTimer); dataTimer = null; } if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } };
+
+                onMounted(async () => {
+                    if (authKey.value && currentUser.value) {
+                        isLoggedIn.value = true;
+                        if (role.value !== 'admin' && activeTab.value !== 'settings') activeTab.value = 'probe';
+                        if (role.value === 'admin') {
+                            await refreshData();
+                            queueMicrotask(connectRealtime);
+                        } else startPolling();
+                        
+                    }
+                    await fetchProbeData();
+                    if (!isLoggedIn.value || role.value !== 'admin') startProbePolling();
+                    document.addEventListener('visibilitychange', () => { if (document.hidden) { realtimeGeneration++; realtimeDisconnectedAt = 0; publicRealtimeDisconnectedAt = 0; stopPolling(); stopProbePolling(); clearInterval(realtimePingTimer); clearInterval(publicRealtimeActivityTimer); clearTimeout(realtimeFallbackTimer); clearTimeout(realtimeReconnectTimer); clearTimeout(publicRealtimeReconnectTimer); const socket = realtimeSocket; realtimeSocket = null; socket?.close(); const publicSocket = publicRealtimeSocket; publicRealtimeSocket = null; publicSocket?.close(); realtimeConnected.value = false; window.myvpsRealtimeConnected = false; } else if (isLoggedIn.value && role.value === 'admin' && realtimeUrl.value) { connectRealtime(); scheduleRealtimeFallback(); } else if (!isLoggedIn.value && realtimeUrl.value && probeSys.is_public === 'true') { connectPublicRealtime(); } else { if (isLoggedIn.value) startPolling(); startProbePolling(); } });
+                });
+
+                return { 
+                    isLoggedIn, showLoginModal, loginUser, password, currentUser, role, activeTab, 
+                    servers, nodes, users, newVps, newNodeParams, newUser, 
+                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addVps, deleteVps, getNodesByIp, getVpsName, formatBytes, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, copyCommand,
+                    globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, generateUUIDForNewUser,
+                    probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
+                    saveProbeSettings, saveSubscriptionProtection, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain, 
+                    showWelcomePopup, closePopup,
+                    availableThemes, pingNodes, pullGithubNodes, hasCustomCssFlag,
+                };
+            }
+        }).mount('#app');
+    </script>
+
+    <script>
+    </script>
+</body>
+</html>
