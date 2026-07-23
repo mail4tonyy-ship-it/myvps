@@ -172,6 +172,7 @@
         .myvps-settings-page select,
         .myvps-settings-page textarea,
         .myvps-settings-page button { max-width: 100%; }
+        .myvps-settings-page button { white-space: nowrap; }
         .myvps-settings-page label,
         .myvps-settings-page p,
         .myvps-settings-page h3,
@@ -480,11 +481,16 @@
             </div>
             <div v-if="activeTab === 'settings'" class="myvps-settings-page space-y-6 max-w-full overflow-hidden">
                 <template v-if="role === 'admin'">
-                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
-                        <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">⚙️ MyVps 系统参数</h3>
-                        <div class="max-w-md">
-                            <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">控制面板全局名称</label>
-                            <div class="flex flex-col sm:flex-row gap-3"><input v-model="siteTitleInput" placeholder="Cluster Gateway" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="saveSiteTitle" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md">保存更改</button></div>
+                    <div class="myvps-settings-card bg-white/60 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 max-w-full overflow-hidden">
+                        <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+                            <div class="lg:w-72 shrink-0">
+                                <h3 class="text-xl font-black text-slate-800 flex items-center gap-2">⚙️ MyVps 系统参数</h3>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">控制面板全局名称</label>
+                                <input v-model="siteTitleInput" placeholder="Cluster Gateway" class="w-full min-w-0 bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium">
+                            </div>
+                            <button @click="saveSiteTitle" class="w-full sm:w-auto bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md">保存更改</button>
                         </div>
                     </div>
 
@@ -917,9 +923,24 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                             localStorage.setItem('myvps_auth_key', authKey.value); localStorage.setItem('myvps_user', currentUser.value); localStorage.setItem('myvps_role', role.value);
                             isLoggedIn.value = true; showLoginModal.value = false; password.value = ''; const publicSocket = publicRealtimeSocket; publicRealtimeSocket = null; publicSocket?.close(); clearTimeout(publicRealtimeReconnectTimer); clearTimeout(publicRealtimeFallbackTimer); clearInterval(publicRealtimeActivityTimer);
                             activeTab.value = role.value === 'admin' ? 'nodes' : 'probe';
-                            startPolling(); fetchProbeData(); queueMicrotask(connectRealtime);
-                        } else alert('⚠️ 账户名或密码错误');
-                    } catch (e) { alert('登录异常'); }
+                            queueMicrotask(() => {
+                                try {
+                                    startPolling();
+                                    fetchProbeData();
+                                    connectRealtime();
+                                } catch (error) {
+                                    console.warn('[login] post-login refresh failed', error);
+                                }
+                            });
+                            return;
+                        }
+                        const raw = await res.text();
+                        let message = raw || `HTTP ${res.status}`;
+                        try { const err = JSON.parse(raw); message = err.error || err.message || message; } catch(e) {}
+                        alert(res.status === 401 ? '⚠️ 账户名或密码错误' : `登录失败：${message.substring(0, 300)}`);
+                    } catch (e) {
+                        alert(`登录异常：${(e && e.message ? e.message : String(e)).substring(0, 300)}`);
+                    }
                 };
                 
                 const clearPrivateState = () => { servers.value = []; nodes.value = []; users.value = []; adminProbeServers.value = []; mySubToken.value = ''; probeDetailId.value = null; probeDetail.value = {};  };
@@ -1017,7 +1038,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                             probeDetail.value = live && Number(live._realtime_ts || 0) > Number(detail.last_updated || 0) ? { ...detail, ...live } : detail;
                             updateProbeDetailCharts(probeDetail.value);
                         } else {
-                            const ajaxParam = isFirstLoad ? '' : '?ajax=1';
+                            const ajaxParam = isFirstLoad ? '' : `?ajax=1&t=${Date.now()}`;
                             isFirstLoad = false;
                             const res = await fetch(`/api/probe/public${ajaxParam}`, {headers: authHeader});
                             if (!res.ok) { if(res.status===401) showLoginModal.value = true; throw new Error("Private Dashboard"); }
