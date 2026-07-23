@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 
+AGENT_VERSION = "2026.07.23.1"
 API_URL = os.environ.get("API_URL", "").rstrip("/")
 VPS_IP = os.environ.get("VPS_IP", "")
 TOKEN = os.environ.get("TOKEN", "")
@@ -23,6 +24,7 @@ ping_targets = {
     "ping_cu": "119.29.29.29",
     "ping_cm": "120.196.165.24",
     "ping_bd": "180.76.76.76",
+    "ping_v4": "1.1.1.1",
 }
 
 
@@ -120,6 +122,14 @@ def ping_ms(target):
     return int(float(match.group(1))) if match else 0
 
 
+def ping4_ms(target):
+    if not target or target == "default":
+        return 0
+    out = run(["ping", "-4", "-c", "1", "-W", "2", target], timeout=3)
+    match = re.search(r"time[=<]([0-9.]+)", out)
+    return int(float(match.group(1))) if match else 0
+
+
 def ip_versions():
     ip4 = run(["sh", "-c", "ip -4 route get 1.1.1.1 | awk '{print $7; exit}'"])
     ip6 = run(["sh", "-c", "ip -6 route get 2606:4700:4700::1111 | awk '{print $9; exit}'"])
@@ -154,6 +164,7 @@ def collect():
     return {
         "ip": VPS_IP,
         "report_id": f"{VPS_IP}:{time.time_ns()}",
+        "agent_version": AGENT_VERSION,
         "cpu": cpu_percent(),
         "mem": round(ram_used * 100 / ram_total, 2) if ram_total else 0,
         "disk": disk_percent,
@@ -181,6 +192,7 @@ def collect():
         "ping_cu": ping_ms(ping_targets["ping_cu"]),
         "ping_cm": ping_ms(ping_targets["ping_cm"]),
         "ping_bd": ping_ms(ping_targets["ping_bd"]),
+        "ping_v4": ping4_ms(ping_targets["ping_v4"]),
         "ip_v4": ip4,
         "ip_v6": ip6,
     }

@@ -82,6 +82,7 @@
     .mini-bar span { display: block; height: 100%; background: var(--accent); }
     .panel { padding: 16px; margin-bottom: 14px; }
     .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; }
+    .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .panel h2 { margin: 0; font-size: 17px; }
     .form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .field { display: grid; gap: 5px; }
@@ -93,6 +94,8 @@
     .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
     .dialog h3 { margin: 0; font-size: 18px; }
     .command { background: #0b1020; color: #dbeafe; padding: 12px; border-radius: 8px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; }
+    .flag { font-size: 18px; line-height: 1; }
     canvas { width: 100%; max-height: 260px; }
     .empty { text-align: center; padding: 48px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 75%, transparent); }
     .hide { display: none !important; }
@@ -138,13 +141,20 @@
     <section class="panel hide" id="adminPanel">
       <div class="panel-head">
         <h2>面板设置</h2>
-        <button class="text-btn primary" id="saveSettingsBtn"><i data-lucide="save"></i><span>保存</span></button>
+        <div class="panel-actions">
+          <button class="text-btn" id="upgradeBtn"><i data-lucide="arrow-up-circle"></i><span>升级 Agent</span></button>
+          <button class="text-btn primary" id="saveSettingsBtn"><i data-lucide="save"></i><span>保存</span></button>
+        </div>
       </div>
       <div class="form">
         <div class="field"><label>标题</label><input id="siteTitleInput"></div>
         <div class="field"><label>公开看板</label><select id="publicInput"><option value="true">开启</option><option value="false">关闭</option></select></div>
         <div class="field"><label>上报间隔（秒）</label><input id="intervalInput" type="number" min="10" max="300"></div>
         <div class="field"><label>流量周期自动重置</label><select id="resetInput"><option value="true">开启</option><option value="false">关闭</option></select></div>
+        <div class="field"><label>IPv4 延迟目标</label><input id="pingV4Input" placeholder="1.1.1.1"></div>
+        <div class="field"><label>新登录密码</label><input id="newPasswordInput" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>确认密码</label><input id="confirmPasswordInput" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>&nbsp;</label><button class="text-btn" id="savePasswordBtn"><i data-lucide="key-round"></i><span>改密码</span></button></div>
       </div>
     </section>
 
@@ -179,6 +189,7 @@
         <div class="field"><label>密码</label><input id="password" type="password" autocomplete="current-password"></div>
         <div class="field"><label>&nbsp;</label><button class="text-btn primary" id="doLogin"><i data-lucide="log-in"></i><span>登录</span></button></div>
       </div>
+      <div class="hint">首次部署如果还没有设置密码，请在这里输入一个至少 8 位的新密码，系统会自动完成初始化。</div>
     </div>
   </div>
 
@@ -195,6 +206,14 @@
         <div class="label" style="margin-bottom:6px">在 VPS 上以 root 执行</div>
         <div class="command" id="commandText"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="upgradeModal">
+    <div class="dialog">
+      <div class="dialog-head"><h3>Agent 在线升级</h3><button class="icon-btn" data-close="upgradeModal"><i data-lucide="x"></i></button></div>
+      <div class="hint" style="margin-bottom:10px">复制下面命令，在旧节点 VPS 上以 root 执行，即可升级到当前仓库里的最新 Agent。</div>
+      <div class="command" id="upgradeCommandText"></div>
     </div>
   </div>
 
@@ -269,6 +288,7 @@
       $("publicInput").value = settings.is_public || "true";
       $("intervalInput").value = settings.report_interval || 15;
       $("resetInput").value = settings.auto_reset_traffic || "true";
+      $("pingV4Input").value = settings.ping_node_v4 || "1.1.1.1";
       $("adminPanel").classList.toggle("hide", !state.token);
       $("addBtn").classList.toggle("hide", !state.token);
       $("loginBtn").innerHTML = state.token ? '<i data-lucide="log-out"></i><span>退出</span>' : '<i data-lucide="lock"></i><span>登录</span>';
@@ -293,8 +313,8 @@
       return `<article class="server">
         <div class="server-top">
           <div>
-            <div class="server-name">${escapeHtml(s.name || s.ip)}</div>
-            <div class="meta">${escapeHtml(s.ip)} · ${escapeHtml(s.group_name || "default")} · ${age(s.last_report)}</div>
+            <div class="server-name"><span class="flag">${countryFlag(s.country)}</span> ${escapeHtml(s.name || s.ip)}</div>
+            <div class="meta">${escapeHtml(s.ip)} · ${escapeHtml(s.group_name || "default")} · ${countryName(s.country)} · ${age(s.last_report)}</div>
           </div>
           <span class="pill ${s.state}">${statusText}</span>
         </div>
@@ -306,7 +326,8 @@
         <div class="detail-line">
           <div>入 ${fmtSpeed(s.net_in_speed)}</div><div>出 ${fmtSpeed(s.net_out_speed)}</div>
           <div>月入 ${fmtBytes(s.monthly_rx)}</div><div>月出 ${fmtBytes(s.monthly_tx)}</div>
-          <div>CT ${s.ping_ct || 0}ms</div><div>CU ${s.ping_cu || 0}ms · CM ${s.ping_cm || 0}ms</div>
+          <div>IPv4 ${s.ping_v4 || 0}ms</div><div>CT ${s.ping_ct || 0}ms · CU ${s.ping_cu || 0}ms</div>
+          <div>Agent ${escapeHtml(s.agent_version || "-")}</div><div>CM ${s.ping_cm || 0}ms · BD ${s.ping_bd || 0}ms</div>
         </div>
         <div class="server-actions">
           <button class="icon-btn" title="详情" onclick="openDetail('${encodeURIComponent(s.ip)}')"><i data-lucide="activity"></i></button>
@@ -323,17 +344,28 @@
       return `<div class="metric-cell"><div>${sub}</div><div class="mini-bar"><span style="width:${pct(value)}%"></span></div></div>`;
     }
 
+    function countryFlag(code) {
+      const country = String(code || "").toUpperCase();
+      if (!/^[A-Z]{2}$/.test(country) || country === "XX") return "🏳";
+      return Array.from(country).map(ch => String.fromCodePoint(127397 + ch.charCodeAt(0))).join("");
+    }
+
+    function countryName(code) {
+      const country = String(code || "").toUpperCase();
+      return /^[A-Z]{2}$/.test(country) && country !== "XX" ? country : "未知地区";
+    }
+
     function serverRow(s) {
       const statusText = s.state === "online" ? "在线" : s.state === "stale" ? "延迟" : "离线";
       return `<tr>
-        <td><div class="server-name">${escapeHtml(s.name || s.ip)}</div><div class="meta">${escapeHtml(s.ip)} · ${escapeHtml(s.group_name || "default")}</div></td>
+        <td><div class="server-name"><span class="flag">${countryFlag(s.country)}</span> ${escapeHtml(s.name || s.ip)}</div><div class="meta">${escapeHtml(s.ip)} · ${escapeHtml(s.group_name || "default")} · Agent ${escapeHtml(s.agent_version || "-")}</div></td>
         <td><span class="pill ${s.state}">${statusText}</span></td>
         <td>${miniMetric(s.cpu)}</td>
         <td>${miniMetric(s.mem, `${fmtBytes(s.ram_used)} / ${fmtBytes(s.ram_total)}`)}</td>
         <td>${miniMetric(s.disk, `${fmtBytes(s.disk_used)} / ${fmtBytes(s.disk_total)}`)}</td>
         <td>入 ${fmtSpeed(s.net_in_speed)}<br>出 ${fmtSpeed(s.net_out_speed)}</td>
         <td>入 ${fmtBytes(s.monthly_rx)}<br>出 ${fmtBytes(s.monthly_tx)}</td>
-        <td>CT ${s.ping_ct || 0}ms<br>CU ${s.ping_cu || 0}ms · CM ${s.ping_cm || 0}ms</td>
+        <td>IPv4 ${s.ping_v4 || 0}ms<br>CT ${s.ping_ct || 0}ms · CU ${s.ping_cu || 0}ms</td>
         <td>${age(s.last_report)}</td>
         <td>
           <button class="icon-btn" title="详情" onclick="openDetail('${encodeURIComponent(s.ip)}')"><i data-lucide="activity"></i></button>
@@ -407,6 +439,20 @@
       closeModal("loginModal");
       await load();
     };
+    $("upgradeBtn").onclick = async () => {
+      const res = await request("/api/agent/upgrade-command");
+      $("upgradeCommandText").textContent = res.command;
+      openModal("upgradeModal");
+      await navigator.clipboard?.writeText(res.command).catch(() => {});
+    };
+    $("savePasswordBtn").onclick = async () => {
+      const password = $("newPasswordInput").value;
+      if (password !== $("confirmPasswordInput").value) return alert("两次输入的密码不一致");
+      await request("/api/password", { method: "POST", body: JSON.stringify({ password }) });
+      $("newPasswordInput").value = "";
+      $("confirmPasswordInput").value = "";
+      alert("登录密码已更新");
+    };
     $("addBtn").onclick = () => { $("commandWrap").classList.add("hide"); openModal("serverModal"); };
     $("createServer").onclick = async () => {
       const res = await request("/api/servers", { method: "POST", body: JSON.stringify({ ip: $("serverIp").value.trim(), name: $("serverName").value.trim(), group_name: $("serverGroup").value.trim() }) });
@@ -420,6 +466,7 @@
         site_title: $("siteTitleInput").value,
         is_public: $("publicInput").value,
         report_interval: $("intervalInput").value,
+        ping_node_v4: $("pingV4Input").value,
         auto_reset_traffic: $("resetInput").value,
       }) });
       await load();

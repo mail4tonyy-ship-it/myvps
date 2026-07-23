@@ -2,6 +2,7 @@ const SESSION_TTL = 12 * 60 * 60 * 1000;
 const REPORT_LIMIT = 256 * 1024;
 const STALE_AFTER = 90 * 1000;
 const OFFLINE_AFTER = 6 * 60 * 1000;
+const AGENT_VERSION = "2026.07.23.1";
 
 const json = (body, init = {}) => new Response(JSON.stringify(body), {
   ...init,
@@ -11,6 +12,16 @@ const json = (body, init = {}) => new Response(JSON.stringify(body), {
 async function sha256(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function passwordHash(password) {
+  return `sha256:${await sha256(password)}`;
+}
+
+async function passwordMatches(password, stored) {
+  if (!stored) return false;
+  if (stored.startsWith("sha256:")) return `sha256:${await sha256(password)}` === stored;
+  return password === stored;
 }
 
 async function readJson(request, limit = 32 * 1024) {
@@ -76,8 +87,10 @@ async function ensureSchema(db) {
       ping_cu INTEGER DEFAULT 0,
       ping_cm INTEGER DEFAULT 0,
       ping_bd INTEGER DEFAULT 0,
+      ping_v4 INTEGER DEFAULT 0,
       ip_v4 TEXT DEFAULT '',
       ip_v6 TEXT DEFAULT '',
+      agent_version TEXT DEFAULT '',
       history TEXT DEFAULT '{}',
       last_report INTEGER DEFAULT 0,
       last_report_id TEXT DEFAULT '',
@@ -101,6 +114,14 @@ async function ensureSchema(db) {
     )`),
   ]);
 
+  const upgrades = [
+    "ALTER TABLE servers ADD COLUMN ping_v4 INTEGER DEFAULT 0",
+    "ALTER TABLE servers ADD COLUMN agent_version TEXT DEFAULT ''",
+  ];
+  for (const sql of upgrades) {
+    try { await db.prepare(sql).run(); } catch {}
+  }
+
   const defaults = {
     site_title: "服务器全景探针",
     is_public: "true",
@@ -109,6 +130,7 @@ async function ensureSchema(db) {
     ping_node_cu: "119.29.29.29",
     ping_node_cm: "120.196.165.24",
     ping_node_bd: "180.76.76.76",
+    ping_node_v4: "1.1.1.1",
     theme: "light",
     auto_reset_traffic: "true",
   };
@@ -121,6 +143,12 @@ async function ensureSchema(db) {
 async function settingsMap(db) {
   const rows = (await db.prepare("SELECT key, value FROM settings").all()).results || [];
   return Object.fromEntries(rows.map(row => [row.key, row.value]));
+}
+
+function clientSettings(settings) {
+  const filtered = { ...settings };
+  delete filtered.admin_password_hash;
+  return filtered;
 }
 
 async function newSession(db, username) {
@@ -189,6 +217,7 @@ function pushHistory(raw, data, now) {
   add("ping_cu", Number(data.ping_cu || 0));
   add("ping_cm", Number(data.ping_cm || 0));
   add("ping_bd", Number(data.ping_bd || 0));
+  add("ping_v4", Number(data.ping_v4 || 0));
   history.last_time = now;
   return JSON.stringify(history);
 }
@@ -236,13 +265,14 @@ async function handleReport(request, env, db) {
       country=?, cpu=?, mem=?, disk=?, load_avg=?, uptime=?, os=?, cpu_info=?, arch=?, virt=?, boot_time=?,
       ram_total=?, ram_used=?, swap_total=?, swap_used=?, disk_total=?, disk_used=?, processes=?, tcp_conn=?, udp_conn=?,
       net_rx=?, net_tx=?, last_rx=?, last_tx=?, monthly_rx=?, monthly_tx=?, reset_cycle=?,
-      net_in_speed=?, net_out_speed=?, ping_ct=?, ping_cu=?, ping_cm=?, ping_bd=?, ip_v4=?, ip_v6=?,
+      net_in_speed=?, net_out_speed=?, ping_ct=?, ping_cu=?, ping_cm=?, ping_bd=?, ping_v4=?, ip_v4=?, ip_v6=?,
+      agent_version=?,
       history=?, last_report=?, last_report_id=?, alert_sent=0 WHERE ip=?`)
       .bind(country, data.cpu || 0, data.mem || 0, data.disk || 0, data.load || "", data.uptime || "", data.os || "", data.cpu_info || "", data.arch || "", data.virt || "", data.boot_time || "",
         data.ram_total || 0, data.ram_used || 0, data.swap_total || 0, data.swap_used || 0, data.disk_total || 0, data.disk_used || 0, data.processes || 0, data.tcp_conn || 0, data.udp_conn || 0,
         currentRx, currentTx, lastRx, lastTx, monthlyRx, monthlyTx, cycle,
-        data.net_in_speed || 0, data.net_out_speed || 0, data.ping_ct || 0, data.ping_cu || 0, data.ping_cm || 0, data.ping_bd || 0, data.ip_v4 || "", data.ip_v6 || "",
-        history, now, data.report_id, data.ip),
+        data.net_in_speed || 0, data.net_out_speed || 0, data.ping_ct || 0, data.ping_cu || 0, data.ping_cm || 0, data.ping_bd || 0, data.ping_v4 || 0, data.ip_v4 || "", data.ip_v6 || "",
+        data.agent_version || "", history, now, data.report_id, data.ip),
   ]);
 
   return json({
@@ -252,6 +282,7 @@ async function handleReport(request, env, db) {
     ping_cu: settings.ping_node_cu,
     ping_cm: settings.ping_node_cm,
     ping_bd: settings.ping_node_bd,
+    ping_v4: settings.ping_node_v4,
   });
 }
 
@@ -267,10 +298,23 @@ async function api(request, env, ctx) {
 
   if (action === "login" && request.method === "POST") {
     const body = await readJson(request, 8 * 1024).catch(() => ({}));
-    if (String(body.username || "") === (env.ADMIN_USERNAME || "admin") && String(body.password || "") === String(env.ADMIN_PASSWORD || "")) {
-      return json({ success: true, token: await newSession(db, env.ADMIN_USERNAME || "admin"), role: "admin" });
+    const username = env.ADMIN_USERNAME || "admin";
+    const password = String(body.password || "");
+    if (String(body.username || "") !== username) return json({ error: "Unauthorized" }, { status: 401 });
+    const envPassword = String(env.ADMIN_PASSWORD || "");
+    if (envPassword && envPassword !== "change-me-now" && password === envPassword) {
+      return json({ success: true, token: await newSession(db, username), role: "admin" });
     }
-    return json({ error: "Unauthorized" }, { status: 401 });
+    const stored = await db.prepare("SELECT value FROM settings WHERE key = 'admin_password_hash'").first();
+    if (stored?.value && await passwordMatches(password, stored.value)) {
+      return json({ success: true, token: await newSession(db, username), role: "admin" });
+    }
+    if (!stored?.value && password.length >= 8) {
+      await db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('admin_password_hash', ?, ?)")
+        .bind(await passwordHash(password), Date.now()).run();
+      return json({ success: true, token: await newSession(db, username), role: "admin", setup: true });
+    }
+    return json({ error: stored?.value ? "Unauthorized" : "首次登录请设置至少 8 位密码" }, { status: 401 });
   }
 
   if (action === "logout" && request.method === "POST") {
@@ -284,7 +328,7 @@ async function api(request, env, ctx) {
     const settings = await settingsMap(db);
     if (settings.is_public !== "true") return json({ error: "Private dashboard" }, { status: 403 });
     const rows = (await db.prepare("SELECT * FROM servers WHERE hidden = 0 ORDER BY group_name, name").all()).results || [];
-    return json({ settings, servers: rows.map(row => decorateServer(row)) });
+    return json({ settings: clientSettings(settings), servers: rows.map(row => decorateServer(row)) });
   }
 
   if (action === "report" && request.method === "POST") return handleReport(request, env, db);
@@ -293,7 +337,7 @@ async function api(request, env, ctx) {
     const ip = url.searchParams.get("ip") || "";
     if (!(await verifyAgent(request, db, ip))) return new Response("Unauthorized", { status: 401 });
     const settings = await settingsMap(db);
-    return json({ settings });
+    return json({ settings: clientSettings(settings) });
   }
 
   if (action === "agent" && parts[1] === "script" && request.method === "GET") {
@@ -305,10 +349,19 @@ async function api(request, env, ctx) {
 
   if (action === "me") return json({ username: env.ADMIN_USERNAME || "admin", role: "admin" });
 
+  if (action === "password" && request.method === "POST") {
+    const body = await readJson(request, 8 * 1024).catch(() => ({}));
+    const password = String(body.password || "");
+    if (password.length < 8) return json({ error: "密码至少 8 位" }, { status: 400 });
+    await db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('admin_password_hash', ?, ?)")
+      .bind(await passwordHash(password), Date.now()).run();
+    return json({ success: true });
+  }
+
   if (action === "data" && request.method === "GET") {
     const settings = await settingsMap(db);
     const rows = (await db.prepare("SELECT * FROM servers ORDER BY group_name, name").all()).results || [];
-    return json({ settings, servers: rows.map(row => decorateServer(row)), origin: publicOrigin(request) });
+    return json({ settings: clientSettings(settings), servers: rows.map(row => decorateServer(row)), origin: publicOrigin(request) });
   }
 
   if (action === "servers" && request.method === "POST") {
@@ -320,7 +373,8 @@ async function api(request, env, ctx) {
       VALUES (?, ?, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET name=excluded.name, group_name=excluded.group_name`)
       .bind(body.ip, String(body.name || body.ip).slice(0, 100), String(body.group_name || "default").slice(0, 80), token, now).run();
     const row = await db.prepare("SELECT * FROM servers WHERE ip = ?").bind(body.ip).first();
-    return json({ success: true, server: decorateServer(row), command: installCommand(publicOrigin(request), body.ip, row.agent_token) });
+    const origin = publicOrigin(request);
+    return json({ success: true, server: decorateServer(row), command: installCommand(origin, body.ip, row.agent_token), upgradeCommand: upgradeCommand(origin) });
   }
 
   if (action === "servers" && request.method === "PUT") {
@@ -345,9 +399,13 @@ async function api(request, env, ctx) {
     return json({ success: true, token, command: installCommand(publicOrigin(request), ip, token) });
   }
 
+  if (action === "agent" && parts[1] === "upgrade-command" && request.method === "GET") {
+    return json({ success: true, command: upgradeCommand(publicOrigin(request)), version: AGENT_VERSION });
+  }
+
   if (action === "settings" && request.method === "POST") {
     const body = await readJson(request, 32 * 1024);
-    const allowed = ["site_title", "is_public", "report_interval", "ping_node_ct", "ping_node_cu", "ping_node_cm", "ping_node_bd", "theme", "auto_reset_traffic"];
+    const allowed = ["site_title", "is_public", "report_interval", "ping_node_ct", "ping_node_cu", "ping_node_cm", "ping_node_bd", "ping_node_v4", "theme", "auto_reset_traffic"];
     const now = Date.now();
     const statements = allowed.filter(key => body[key] !== undefined).map(key =>
       db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)").bind(key, String(body[key]), now)
@@ -366,6 +424,10 @@ async function api(request, env, ctx) {
 
 function installCommand(origin, ip, token) {
   return `curl -fsSL ${origin}/vps/install.sh | sh -s -- --api ${origin} --ip ${ip} --token ${token}`;
+}
+
+function upgradeCommand(origin) {
+  return `curl -fsSL ${origin}/vps/upgrade-agent.sh | sh`;
 }
 
 async function checkOffline(env) {
