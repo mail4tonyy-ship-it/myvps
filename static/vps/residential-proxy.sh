@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================
-# KUI 住宅IP代理 Agent 安装脚本 (Residential Proxy Agent)
+# MyVps 住宅IP代理 Agent 安装脚本 (Residential Proxy Agent)
 # 用法:
-#   bash <(curl -sL https://<KUI_PAGES>/vps/residential-proxy.sh) \
-#        --domain https://<KUI_PAGES> --controller https://<RESIDENTIAL_CTRL>
-#   --domain      : 本仓库 (KUI Pages) 域名，用于下载 /vps/ 下的 agent 脚本
+#   bash <(curl -sL https://<MYVPS_PAGES>/vps/residential-proxy.sh) \
+#        --domain https://<MYVPS_PAGES> --controller https://<RESIDENTIAL_CTRL>
+#   --domain      : 本仓库 (MyVps Pages) 域名，用于下载 /vps/ 下的 agent 脚本
 #   --controller  : 住宅IP代理控制器域名 (Free-Residential-IP-Proxy-Controller 部署地址)
 #                   即 agent 心跳上报 (C2) 地址，对应面板 PROXY_CTRL_URL
 # ==========================================================
@@ -374,9 +374,9 @@ main() {
     download_agents
     install_service
     if [ "$INIT_SYS" = "systemd" ]; then
-        systemctl restart kui-agent 2>/dev/null || true
+        systemctl restart myvps-agent 2>/dev/null || true
     elif [ "$INIT_SYS" = "openrc" ]; then
-        rc-service kui-agent restart 2>/dev/null || true
+        rc-service myvps-agent restart 2>/dev/null || true
     fi
     for _ in $(seq 1 30); do
         if [ "$INIT_SYS" = "systemd" ] && systemctl is-active --quiet sing-box; then break; fi
