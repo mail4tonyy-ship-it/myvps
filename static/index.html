@@ -267,13 +267,14 @@
         .myvps-settings-table-scroll th,
         .myvps-settings-table-scroll td { white-space: normal; }
         .homeip-console { background: #070b16; color: #d8e0f2; border: 1px solid rgba(99,102,241,.18); box-shadow: 0 24px 80px rgba(15,23,42,.18); }
+        .homeip-console, .homeip-console * { box-sizing: border-box; min-width: 0; }
         .homeip-panel { background: rgba(18,25,40,.82); border: 1px solid rgba(100,116,139,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
         .homeip-muted { color: #8b98ad; }
         .homeip-accent { color: #2ee6a6; }
         .homeip-chip { background: rgba(30,41,59,.9); border: 1px solid rgba(100,116,139,.34); }
         .homeip-chip.active { background: rgba(79,70,229,.2); color: #c7d2fe; border-color: rgba(129,140,248,.45); }
         .homeip-terminal { background: #090e15; border: 1px solid rgba(71,85,105,.38); }
-        .homeip-command-line { white-space: nowrap; overflow-x: auto; overflow-y: hidden; max-width: 100%; background: rgba(2,6,23,.72); border: 1px solid rgba(51,65,85,.85); }
+        .homeip-command-line { display: block; width: 100%; white-space: nowrap; overflow-x: auto; overflow-y: hidden; max-width: 100%; background: rgba(2,6,23,.72); border: 1px solid rgba(51,65,85,.85); }
         .homeip-command-line::-webkit-scrollbar { height: 7px; }
         .homeip-command-line::-webkit-scrollbar-thumb { background: rgba(45,212,191,.45); border-radius: 99px; }
         .homeip-terminal pre::-webkit-scrollbar { width: 8px; }
@@ -583,7 +584,7 @@
                 </div>
             </div>
             <div v-if="role === 'admin' && activeTab === 'homeip'" class="homeip-console rounded-[2rem] p-4 md:p-8 space-y-8 overflow-hidden">
-                <div class="grid grid-cols-1 xl:grid-cols-[1fr_1.05fr] gap-8 items-start">
+                <div class="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] gap-6 items-start">
                     <div class="space-y-5">
                         <div>
                             <h2 class="text-4xl md:text-5xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400">Proxy Controller</h2>
@@ -600,7 +601,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="space-y-4">
+                    <div class="space-y-4 min-w-0">
                         <div class="homeip-terminal rounded-[1.25rem] overflow-hidden">
                             <div class="px-5 py-3 bg-slate-800/80 border-b border-slate-700/70 flex flex-wrap items-center justify-between gap-3">
                                 <div class="flex items-center gap-2 min-w-0">
@@ -609,45 +610,51 @@
                                 </div>
                                 <button @click="copyCommand(generateHomeIpCmd(), '住宅IP部署命令已复制')" class="homeip-chip active px-4 py-2 rounded-lg text-xs font-black">复制 Root 命令</button>
                             </div>
-                            <div class="p-5 space-y-3">
-                                <div class="flex flex-wrap gap-2 text-[11px] font-black">
-                                    <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">独立服务 proxy-lite</span>
-                                    <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">不覆盖 myvps-agent</span>
-                                    <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">Root 执行</span>
+                            <div class="p-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px] gap-4 items-start">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap gap-2 text-[11px] font-black mb-3">
+                                        <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">独立服务 proxy-lite</span>
+                                        <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">不覆盖 myvps-agent</span>
+                                        <span class="homeip-chip rounded-md px-2.5 py-1 text-slate-300">Root 执行</span>
+                                    </div>
+                                    <div class="homeip-command-line rounded-xl px-4 py-3 text-emerald-400 font-mono text-xs cursor-pointer hover:text-emerald-300 transition-colors" @click="copyCommand(generateHomeIpCmd(), '住宅IP部署命令已复制')">{{ generateHomeIpCmd() }}</div>
                                 </div>
-                                <div class="homeip-command-line rounded-xl px-4 py-3 text-emerald-400 font-mono text-xs cursor-pointer hover:text-emerald-300 transition-colors" @click="copyCommand(generateHomeIpCmd(), '住宅IP部署命令已复制')">{{ generateHomeIpCmd() }}</div>
+                                <div class="grid grid-cols-2 lg:grid-cols-1 gap-3">
+                                    <div class="homeip-panel rounded-xl p-3">
+                                        <div class="homeip-muted text-xs font-black">控制权限</div>
+                                        <div class="mt-1 text-indigo-200 font-black">仅管理员</div>
+                                    </div>
+                                    <div class="homeip-panel rounded-xl p-3">
+                                        <div class="homeip-muted text-xs font-black">代理凭证</div>
+                                        <div class="mt-1 text-amber-300 font-black text-sm">{{ homeIpProxyReady ? '已读取' : '缺少 PROXY_USER/PASS' }}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-[.75fr_1.25fr] gap-4">
-                            <div class="grid grid-cols-1 gap-4">
-                                <div class="homeip-panel rounded-xl p-4 flex justify-between gap-3"><span class="homeip-muted font-black">控制权限</span><span class="text-indigo-200 font-black">仅管理员</span></div>
-                                <div class="homeip-panel rounded-xl p-4 flex justify-between gap-3"><span class="homeip-muted font-black">代理凭证</span><span class="text-amber-300 font-black">{{ homeIpProxyReady ? '已读取' : '缺少 PROXY_USER/PASS' }}</span></div>
+                        <div class="homeip-panel rounded-[1.25rem] p-5">
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                                <div>
+                                    <div class="flex items-center gap-2"><span class="text-indigo-300">🧭</span><h3 class="text-lg font-black text-white">部署与订阅</h3></div>
+                                    <p class="homeip-muted text-xs font-bold mt-1">先选服务器复制部署命令，再复制 SOCKS5 订阅链接。</p>
+                                </div>
+                                <button @click="loadHomeIp" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">刷新状态</button>
                             </div>
-                            <div class="homeip-panel rounded-xl p-4">
-                                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                                    <div>
-                                        <div class="flex items-center gap-2"><span class="text-indigo-300">🧭</span><h3 class="text-lg font-black text-white">部署对象</h3></div>
-                                        <p class="homeip-muted text-xs font-bold mt-1">选择服务器后复制独立家宽部署命令</p>
+                            <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                                <select v-model="homeIpTarget" class="w-full bg-slate-900/80 border border-slate-700 p-3 rounded-xl text-sm font-black text-slate-100">
+                                    <option value="">选择部署服务器</option>
+                                    <option v-for="server in servers" :key="server.ip" :value="server.ip">{{ server.name }} / {{ server.ip }}</option>
+                                </select>
+                                <button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="bg-gradient-to-r from-blue-600 to-violet-600 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg whitespace-nowrap">复制部署命令</button>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-slate-700/70">
+                                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                                    <div><h3 class="text-base font-black text-white">订阅链接生成</h3><p class="homeip-muted text-xs font-bold mt-1">生成带鉴权 token 的节点订阅。</p></div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-black">复制订阅</button>
+                                        <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">重新生成</button>
                                     </div>
-                                    <button @click="loadHomeIp" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">刷新状态</button>
                                 </div>
-                                <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-                                    <select v-model="homeIpTarget" class="w-full bg-slate-900/80 border border-slate-700 p-3 rounded-xl text-sm font-black text-slate-100">
-                                        <option value="">选择部署服务器</option>
-                                        <option v-for="server in servers" :key="server.ip" :value="server.ip">{{ server.name }} / {{ server.ip }}</option>
-                                    </select>
-                                    <button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="bg-gradient-to-r from-blue-600 to-violet-600 text-white px-5 py-3 rounded-xl text-sm font-black shadow-lg whitespace-nowrap">复制部署命令</button>
-                                </div>
-                                <div class="mt-4 pt-4 border-t border-slate-700/70">
-                                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-                                        <div><h3 class="text-lg font-black text-white">订阅链接生成</h3><p class="homeip-muted text-xs font-bold mt-1">SOCKS5 节点订阅，无需登录后台。</p></div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <button @click="copyCommand(homeIpSubscriptionUrl, '家宽订阅链接已复制')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-black">复制订阅</button>
-                                            <button @click="resetHomeIpSubscription" class="homeip-chip text-slate-200 px-4 py-2 rounded-lg text-xs font-black">重新生成</button>
-                                        </div>
-                                    </div>
-                                    <div class="homeip-command-line rounded-xl px-3 py-2 text-indigo-200 font-mono text-xs">{{ homeIpSubscriptionUrl }}</div>
-                                </div>
+                                <div class="homeip-command-line rounded-xl px-3 py-2 text-indigo-200 font-mono text-xs">{{ homeIpSubscriptionUrl }}</div>
                             </div>
                         </div>
                     </div>
