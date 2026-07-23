@@ -126,6 +126,7 @@
         </div>
         <button class="icon-btn" id="refreshBtn" title="刷新"><i data-lucide="refresh-cw"></i></button>
         <button class="icon-btn" id="themeBtn" title="切换主题"><i data-lucide="sun-moon"></i></button>
+        <button class="icon-btn hide" id="passwordBtn" title="修改密码"><i data-lucide="key-round"></i></button>
         <button class="text-btn" id="loginBtn"><i data-lucide="lock"></i><span>登录</span></button>
         <button class="text-btn primary hide" id="addBtn"><i data-lucide="plus"></i><span>纳管服务器</span></button>
       </div>
@@ -152,9 +153,6 @@
         <div class="field"><label>上报间隔（秒）</label><input id="intervalInput" type="number" min="10" max="300"></div>
         <div class="field"><label>流量周期自动重置</label><select id="resetInput"><option value="true">开启</option><option value="false">关闭</option></select></div>
         <div class="field"><label>IPv4 延迟目标</label><input id="pingV4Input" placeholder="1.1.1.1"></div>
-        <div class="field"><label>新登录密码</label><input id="newPasswordInput" type="password" autocomplete="new-password"></div>
-        <div class="field"><label>确认密码</label><input id="confirmPasswordInput" type="password" autocomplete="new-password"></div>
-        <div class="field"><label>&nbsp;</label><button class="text-btn" id="savePasswordBtn"><i data-lucide="key-round"></i><span>改密码</span></button></div>
       </div>
     </section>
 
@@ -205,6 +203,7 @@
       <div id="commandWrap" class="hide" style="margin-top:12px">
         <div class="label" style="margin-bottom:6px">在 VPS 上以 root 执行</div>
         <div class="command" id="commandText"></div>
+        <button class="text-btn primary" id="copyInstallBtn" style="margin-top:10px"><i data-lucide="copy"></i><span>复制命令</span></button>
       </div>
     </div>
   </div>
@@ -214,6 +213,19 @@
       <div class="dialog-head"><h3>Agent 在线升级</h3><button class="icon-btn" data-close="upgradeModal"><i data-lucide="x"></i></button></div>
       <div class="hint" style="margin-bottom:10px">复制下面命令，在旧节点 VPS 上以 root 执行，即可升级到当前仓库里的最新 Agent。</div>
       <div class="command" id="upgradeCommandText"></div>
+      <button class="text-btn primary" id="copyUpgradeBtn" style="margin-top:10px"><i data-lucide="copy"></i><span>复制命令</span></button>
+    </div>
+  </div>
+
+  <div class="modal" id="passwordModal">
+    <div class="dialog">
+      <div class="dialog-head"><h3>修改登录密码</h3><button class="icon-btn" data-close="passwordModal"><i data-lucide="x"></i></button></div>
+      <div class="form">
+        <div class="field"><label>新登录密码</label><input id="newPasswordInput" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>确认密码</label><input id="confirmPasswordInput" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>&nbsp;</label><button class="text-btn primary" id="savePasswordBtn"><i data-lucide="save"></i><span>保存密码</span></button></div>
+      </div>
+      <div class="hint">密码至少 8 位。保存后当前登录状态会保留，新密码用于下次登录。</div>
     </div>
   </div>
 
@@ -291,6 +303,7 @@
       $("pingV4Input").value = settings.ping_node_v4 || "1.1.1.1";
       $("adminPanel").classList.toggle("hide", !state.token);
       $("addBtn").classList.toggle("hide", !state.token);
+      $("passwordBtn").classList.toggle("hide", !state.token);
       $("loginBtn").innerHTML = state.token ? '<i data-lucide="log-out"></i><span>退出</span>' : '<i data-lucide="lock"></i><span>登录</span>';
 
       const online = servers.filter(s => s.state === "online").length;
@@ -439,11 +452,16 @@
       closeModal("loginModal");
       await load();
     };
+    $("passwordBtn").onclick = () => openModal("passwordModal");
     $("upgradeBtn").onclick = async () => {
       const res = await request("/api/agent/upgrade-command");
       $("upgradeCommandText").textContent = res.command;
       openModal("upgradeModal");
       await navigator.clipboard?.writeText(res.command).catch(() => {});
+    };
+    $("copyUpgradeBtn").onclick = async () => {
+      await navigator.clipboard?.writeText($("upgradeCommandText").textContent).catch(() => {});
+      alert("升级命令已复制");
     };
     $("savePasswordBtn").onclick = async () => {
       const password = $("newPasswordInput").value;
@@ -451,6 +469,7 @@
       await request("/api/password", { method: "POST", body: JSON.stringify({ password }) });
       $("newPasswordInput").value = "";
       $("confirmPasswordInput").value = "";
+      closeModal("passwordModal");
       alert("登录密码已更新");
     };
     $("addBtn").onclick = () => { $("commandWrap").classList.add("hide"); openModal("serverModal"); };
@@ -460,6 +479,10 @@
       $("commandWrap").classList.remove("hide");
       await navigator.clipboard?.writeText(res.command).catch(() => {});
       await load();
+    };
+    $("copyInstallBtn").onclick = async () => {
+      await navigator.clipboard?.writeText($("commandText").textContent).catch(() => {});
+      alert("安装命令已复制");
     };
     $("saveSettingsBtn").onclick = async () => {
       await request("/api/settings", { method: "POST", body: JSON.stringify({
