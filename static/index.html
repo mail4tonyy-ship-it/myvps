@@ -23,6 +23,8 @@
 
     <style>
         [v-cloak] { display: none !important; }
+        [data-vue-modal] { display: none !important; }
+        html.myvps-vue-ready [data-vue-modal].is-open { display: flex !important; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 10px; }
@@ -577,7 +579,7 @@
             
         </div>
         
-        <div v-if="serverEditModalOpen" class="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div v-if="serverEditModalOpen" data-vue-modal class="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm items-center justify-center p-4" :class="{ 'is-open': serverEditModalOpen }">
             <div class="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-md relative">
                 <button @click="serverEditModalOpen = false" class="absolute top-4 right-5 text-2xl text-slate-400 hover:text-slate-600">&times;</button>
                 <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">编辑服务器</h3>
@@ -605,7 +607,7 @@
             </div>
         </div>
 
-        <div v-if="probeEditModalOpen" class="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div v-if="probeEditModalOpen" data-vue-modal class="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm items-center justify-center p-4" :class="{ 'is-open': probeEditModalOpen }">
             <div class="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
                 <button @click="probeEditModalOpen = false" class="absolute top-4 right-5 text-2xl text-slate-400 hover:text-slate-600">&times;</button>
                 <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">✏️ 编辑探针展示信息</h3>
@@ -635,6 +637,7 @@
                 </div>
             </div>
         </div>
+    </div>
 
         <script>
         if (!window.Vue) {
@@ -1191,6 +1194,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const stopPolling = () => { if (dataTimer) { clearInterval(dataTimer); dataTimer = null; } if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } };
 
                 onMounted(async () => {
+                    document.documentElement.classList.add('myvps-vue-ready');
                     if (authKey.value && currentUser.value) {
                         isLoggedIn.value = true;
                         if (role.value !== 'admin' && activeTab.value !== 'settings') activeTab.value = 'probe';
