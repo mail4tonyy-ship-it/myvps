@@ -24,6 +24,7 @@ async function sessionToken() { const bytes = crypto.getRandomValues(new Uint8Ar
 function updateManifest(component, sha, length) { return `v1\n${component}\n${sha}\n${length}\n`; }
 
 const MAX_REPORT_BYTES = 256 * 1024;
+const MAX_PROXY_REPORT_BYTES = 96 * 1024;
 const MAX_NODE_DELTA_BYTES = 1024 * 1024 * 1024 * 1024;
 const MAX_REPORT_DELTA_BYTES = MAX_NODE_DELTA_BYTES * 10;
 
@@ -48,6 +49,20 @@ async function readJsonBody(request, maxBytes) {
 }
 
 function validIp(value) { return typeof value === 'string' && /^[0-9A-Fa-f:.]{2,64}$/.test(value); }
+
+function validateProxyReport(data) {
+    if (!validIp(data.ip) || (data.socks_ip && data.socks_ip !== data.ip)) throw new Error('Invalid proxy IP');
+    if (data.logs !== undefined && (typeof data.logs !== 'string' || data.logs.length > 16 * 1024)) throw new Error('Proxy logs too large');
+    const details = data.details === undefined ? undefined : data.details;
+    if (details !== undefined && (!Array.isArray(details) || details.length > 8)) throw new Error('Invalid proxy details');
+    const normalized = details?.map(item => {
+        if (!item || typeof item !== 'object') throw new Error('Invalid proxy detail');
+        const port = Number(item.port || 0);
+        if (port && (!Number.isInteger(port) || port < 1 || port > 65535)) throw new Error('Invalid proxy port');
+        return { tunnel: String(item.tunnel || '').slice(0, 32), active: item.active === true, country: String(item.country || '').toUpperCase().slice(0, 2), port, node_ip: String(item.node_ip || '').slice(0, 64), exit_ip: String(item.exit_ip || '').slice(0, 64), ready: item.ready === true, connected_time: Math.max(0, Math.min(Number(item.connected_time) || 0, 31536000)) };
+    });
+    return { ip: data.ip, details: normalized, logs: data.logs?.slice(0, 16 * 1024) || '' };
+}
 
 function validateTrafficReport(data) {
     if (!validIp(data.ip) || typeof data.report_id !== 'string' || data.report_id.length > 160 || !data.report_id.startsWith(`${data.ip}:`)) throw new Error('Invalid report identity');
@@ -154,8 +169,9 @@ async function initializeDbSchema(db) {
                 `CREATE TABLE IF NOT EXISTS traffic_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, delta_bytes INTEGER DEFAULT 0, timestamp INTEGER NOT NULL, FOREIGN KEY(ip) REFERENCES servers(ip) ON DELETE CASCADE)`,
         `CREATE INDEX IF NOT EXISTS idx_traffic_ip_time ON traffic_stats(ip, timestamp)`,
         `CREATE TABLE IF NOT EXISTS sys_config (key TEXT PRIMARY KEY, val TEXT, ts INTEGER)`,
-                `CREATE TABLE IF NOT EXISTS server_logs (ip TEXT PRIMARY KEY, logs TEXT, updated_at INTEGER)`,
-                `CREATE TABLE IF NOT EXISTS report_receipts (report_id TEXT PRIMARY KEY, vps_ip TEXT NOT NULL, created_at INTEGER NOT NULL, applied INTEGER DEFAULT 1)`,
+        `CREATE TABLE IF NOT EXISTS server_logs (ip TEXT PRIMARY KEY, logs TEXT, updated_at INTEGER)`,
+        `CREATE TABLE IF NOT EXISTS proxy_ctrl_servers (ip TEXT PRIMARY KEY, details TEXT, last_seen INTEGER)`,
+        `CREATE TABLE IF NOT EXISTS report_receipts (report_id TEXT PRIMARY KEY, vps_ip TEXT NOT NULL, created_at INTEGER NOT NULL, applied INTEGER DEFAULT 1)`,
         `CREATE TABLE IF NOT EXISTS auth_replays (nonce TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS login_throttles (key TEXT PRIMARY KEY, failures INTEGER NOT NULL, window_started_at INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0)`,
         `CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL)`
@@ -577,6 +593,82 @@ async function handleProbeAPI(request, env, context, pathArray) {
     return Response.json({error: "Not Found"}, {status: 404});
 }
 
+async function handleProxyAPI(request, env, context, subPath, reportBody = null) {
+    const db = env.DB;
+    const method = request.method;
+    const url = new URL(request.url);
+    await ensureDbSchema(db);
+    const proxyUser = env.PROXY_USER || '';
+    const proxyPass = env.PROXY_PASS || '';
+    if (!proxyUser || !proxyPass) return Response.json({ error: 'PROXY_USER and PROXY_PASS must be configured' }, { status: 503 });
+
+    if (subPath === 'config') {
+        if (method === 'GET') {
+            const requestIp = url.searchParams.get('ip');
+            const row = requestIp ? await db.prepare("SELECT value FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${requestIp}`).first() : null;
+            const globalRow = row || await db.prepare("SELECT value FROM probe_settings WHERE key = 'proxy_slot_map'").first();
+            let slotMap = { "0": "JP", country: "JP", port: 7920, enabled: true };
+            if (globalRow?.value) { try { slotMap = { ...slotMap, ...JSON.parse(globalRow.value) }; } catch(e) {} }
+            const rawCountry = String(slotMap["0"] || slotMap.country || "JP").toUpperCase().slice(0, 2);
+            const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
+            return Response.json({ ...slotMap, "0": rawCountry, country: rawCountry, port: Number(slotMap.port) || 7920, switch_trigger: slotMap.switch_trigger || 0, proxy: { enabled: slotMap.enabled !== false, port: Number(slotMap.port) || 7920, user: proxyUser, pass: proxyPass, country: rawCountry }, realtime_url: env.REALTIME_URL || realtime?.val || '' }, { headers: { 'Cache-Control': 'no-store' } });
+        }
+        if (method === 'POST') {
+            const data = await readJsonBody(request, 16 * 1024);
+            const configKey = data.ip ? `proxy_slot_map_${data.ip}` : 'proxy_slot_map';
+            const existingRow = await db.prepare("SELECT value FROM probe_settings WHERE key = ?").bind(configKey).first();
+            let existing = {};
+            try { existing = JSON.parse(existingRow?.value || '{}'); } catch(e) {}
+            const rawCountry = String(data["0"] || data.country || "JP").toUpperCase().slice(0, 2);
+            const sanitized = { ...existing, "0": rawCountry, country: rawCountry, port: Math.min(65535, Math.max(1, Number(data.port) || 7920)), enabled: data.enabled !== false };
+            if (data.switch_trigger) sanitized.switch_trigger = data.switch_trigger;
+            await db.prepare("INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(configKey, JSON.stringify(sanitized)).run();
+            return Response.json({ success: true, slot_map: sanitized, proxy: { enabled: sanitized.enabled, port: sanitized.port, user: proxyUser, pass: proxyPass, country: rawCountry } }, { headers: { 'Cache-Control': 'no-store' } });
+        }
+    }
+
+    if (subPath === 'report' && method === 'POST') {
+        const data = reportBody || validateProxyReport(await readJsonBody(request, MAX_PROXY_REPORT_BYTES));
+        if (data.details !== undefined) await db.prepare(`INSERT INTO proxy_ctrl_servers (ip, details, last_seen) VALUES (?1, ?2, ?3) ON CONFLICT(ip) DO UPDATE SET details = excluded.details, last_seen = excluded.last_seen`).bind(data.ip, JSON.stringify(data.details), Date.now()).run();
+        else await db.prepare(`INSERT INTO proxy_ctrl_servers (ip, last_seen) VALUES (?1, ?2) ON CONFLICT(ip) DO UPDATE SET last_seen = excluded.last_seen`).bind(data.ip, Date.now()).run();
+        if (data.logs) await db.prepare(`INSERT INTO server_logs (ip, logs, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(ip) DO UPDATE SET logs = excluded.logs, updated_at = excluded.updated_at`).bind(data.ip, data.logs, Date.now()).run();
+        return new Response("OK", { status: 200 });
+    }
+
+    if ((subPath === 'nodes' || subPath === 'pool') && method === 'GET') {
+        const cutoff = Date.now() - 1800000;
+        const { results } = await db.prepare(`SELECT s.ip, s.details, s.last_seen, l.logs FROM proxy_ctrl_servers s LEFT JOIN server_logs l ON s.ip = l.ip WHERE s.last_seen >= ? ORDER BY s.last_seen DESC`).bind(cutoff).all();
+        return Response.json(results || [], { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    if (subPath === 'switch' && method === 'POST') {
+        const data = await readJsonBody(request, 8 * 1024);
+        if (!data.ip) return Response.json({ error: 'IP required' }, { status: 400 });
+        const key = `proxy_slot_map_${data.ip}`;
+        const row = await db.prepare("SELECT value FROM probe_settings WHERE key = ?").bind(key).first();
+        let config = {};
+        try { config = JSON.parse(row?.value || '{}'); } catch(e) {}
+        config.switch_trigger = Date.now();
+        await db.prepare("INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, JSON.stringify(config)).run();
+        return Response.json({ success: true, switch_trigger: config.switch_trigger });
+    }
+
+    if (subPath === 'proxies' && method === 'GET') {
+        const cutoff = Date.now() - 1800000;
+        const { results } = await db.prepare('SELECT ip, details FROM proxy_ctrl_servers WHERE last_seen >= ?').bind(cutoff).all();
+        const list = [];
+        for (const server of results || []) {
+            let details = [];
+            try { details = JSON.parse(server.details || '[]'); } catch(e) {}
+            const node = details.find(item => item.active) || details[0];
+            if (node?.port) list.push(`socks5://${proxyUser}:${proxyPass}@${server.ip}:${node.port}#${node.country || 'HOME'}_${node.node_ip || server.ip}`);
+        }
+        return new Response(list.join('\n'), { headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Cache-Control': 'no-store' } });
+    }
+
+    return new Response('Not Found', { status: 404 });
+}
+
 export async function onRequest(context) {
     const { request, env, params } = context;
     const method = request.method;
@@ -591,6 +683,42 @@ export async function onRequest(context) {
     if (action === "probe") {
         await ensureDbSchema(db);
         return await handleProbeAPI(request, env, context, params.path.slice(1));
+    }
+
+    if (action === "proxy") {
+        await ensureDbSchema(db);
+        const sub = params.path && params.path.length > 1 ? params.path.slice(1).join('/') : '';
+        const allowedProxyPaths = ['config', 'report', 'proxies', 'nodes', 'pool', 'switch'];
+        if (!allowedProxyPaths.includes(sub) || sub.includes('..')) return new Response('Not Found', { status: 404 });
+        if (sub === 'report' && method === 'POST') {
+            let body;
+            try { body = validateProxyReport(await readJsonBody(request.clone(), MAX_PROXY_REPORT_BYTES)); }
+            catch (error) { return Response.json({ error: error.message || 'Invalid proxy report' }, { status: 400 }); }
+            if (!(await verifyAgent(request.headers.get('Authorization'), body.ip, db, env))) return new Response('Unauthorized', { status: 401 });
+            return await handleProxyAPI(request, env, context, sub, body);
+        }
+        if (sub === 'config' && method === 'GET') {
+            const requestIp = new URL(request.url).searchParams.get('ip');
+            const user = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
+            if (user !== (env.ADMIN_USERNAME || 'admin') && !(await verifyAgent(request.headers.get('Authorization'), requestIp, db, env))) return new Response('Forbidden', { status: 403 });
+            return await handleProxyAPI(request, env, context, sub);
+        }
+        const user = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
+        if (user !== (env.ADMIN_USERNAME || 'admin')) return new Response('Forbidden', { status: 403 });
+        return await handleProxyAPI(request, env, context, sub);
+    }
+
+    if (action === "homeip") {
+        await ensureDbSchema(db);
+        const user = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
+        if (user !== (env.ADMIN_USERNAME || 'admin')) return new Response('Forbidden', { status: 403 });
+        const sub = params.path && params.path.length > 1 ? params.path.slice(1).join('/') : 'nodes';
+        if (sub === 'summary' && method === 'GET') {
+            const cutoff = Date.now() - 1800000;
+            const { results } = await db.prepare('SELECT ip, details, last_seen FROM proxy_ctrl_servers WHERE last_seen >= ? ORDER BY last_seen DESC').bind(cutoff).all();
+            return Response.json({ nodes: results || [], proxy_ready: !!(env.PROXY_USER && env.PROXY_PASS), install_ready: true }, { headers: { 'Cache-Control': 'no-store' } });
+        }
+        return await handleProxyAPI(request, env, context, sub);
     }
 
     if (action === "ui_ping" && method === "POST") {
@@ -612,7 +740,7 @@ export async function onRequest(context) {
         if (!(await verifyAgent(request.headers.get('Authorization'), ip, db, env))) return new Response('Unauthorized', { status: 401 });
         if (!env.ASSETS) return Response.json({ error: 'ASSETS binding is unavailable' }, { status: 503 });
         const component = new URL(request.url).searchParams.get('component') || 'agent';
-        const assets = { agent: '/vps/agent.py', 'realtime-client': '/vps/realtime_client.py', 'full-installer': '/vps/myvps.sh' };
+        const assets = { agent: '/vps/agent.py', 'realtime-client': '/vps/realtime_client.py', 'proxy-manager': '/vps/lite_manager.py', 'proxy-server': '/vps/proxy_server.py', 'proxy-installer': '/vps/residential-proxy.sh', 'full-installer': '/vps/myvps.sh' };
         if (!assets[component]) return Response.json({ error: 'Unknown agent component' }, { status: 400 });
         const assetUrl = new URL(assets[component], request.url);
         const asset = await env.ASSETS.fetch(assetUrl);

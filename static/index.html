@@ -496,6 +496,7 @@
                     <template v-if="role === 'admin'">
                         <button @click="activeTab = 'nodes'" :class="activeTab === 'nodes' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 rounded-[.8rem] font-black transition-all text-[12px]">监控</button>
                         <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 rounded-[.8rem] font-black transition-all text-[12px]">系统</button>
+                        <button @click="activeTab = 'homeip'" :class="activeTab === 'homeip' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/45'" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 rounded-[.8rem] font-black transition-all text-[12px]">家宽</button>
                         <button @click="activeTab = 'probe'; probeDetailId = null;" class="myvps-tab-button myvps-admin-tab shrink-0 whitespace-nowrap px-4 rounded-[.8rem] font-black transition-all text-[12px] text-slate-600 hover:bg-white/70">大盘</button>
                     </template>
                     <template v-if="role === 'user'">
@@ -565,6 +566,64 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div v-if="role === 'admin' && activeTab === 'homeip'" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">HOME IP NODES</div><div class="text-3xl font-black text-slate-700">{{ homeIpNodes.length }}</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">ACTIVE TUNNELS</div><div class="text-3xl font-black text-emerald-500">{{ homeIpActiveCount }}</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">PROXY CONFIG</div><div class="text-lg font-black" :class="homeIpProxyReady ? 'text-emerald-500' : 'text-amber-500'">{{ homeIpProxyReady ? '已配置' : '缺少凭据' }}</div></div>
+                    <div class="bg-white/60 backdrop-blur-xl p-5 rounded-[2rem] border border-white shadow-lg shadow-emerald-100/30 text-center"><div class="text-[10px] text-slate-400 font-bold mb-1 tracking-widest">SUBSCRIBE</div><button @click="copyCommand(currentDomain + '/api/proxy/proxies', '家宽订阅地址已复制')" class="text-sm font-black text-blue-600 hover:text-blue-700">复制列表地址</button></div>
+                </div>
+
+                <div class="bg-white/60 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40">
+                    <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-black text-slate-800 mb-2">🏠 家宽代理模块</h3>
+                            <p class="text-sm text-slate-500 font-medium leading-relaxed">从原项目住宅 IP 模块迁移，独立使用 `/api/proxy/*` 和 `proxy_ctrl_servers`，不写入监控服务器数据。目标 VPS 必须已经在“监控”里接入并拥有 Agent Token。</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:w-[520px]">
+                            <select v-model="homeIpTarget" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700">
+                                <option value="">选择部署服务器</option>
+                                <option v-for="server in servers" :key="server.ip" :value="server.ip">{{ server.name }} / {{ server.ip }}</option>
+                            </select>
+                            <input v-model="homeIpCountry" maxlength="2" placeholder="出口国家 JP" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700 uppercase">
+                            <input v-model.number="homeIpPort" type="number" min="1" max="65535" placeholder="端口 7920" class="bg-white/70 border border-white p-3 rounded-2xl text-sm font-bold text-slate-700">
+                        </div>
+                    </div>
+                    <div class="mt-5 bg-slate-900 p-4 rounded-[1.25rem] shadow-inner">
+                        <div class="text-[10px] text-slate-400 font-black uppercase mb-2 flex justify-between gap-3"><span>Residential Proxy Installer</span><button @click="copyCommand(generateHomeIpCmd(), '家宽安装命令已复制')" class="text-emerald-400 hover:text-emerald-300">复制命令</button></div>
+                        <div class="text-emerald-400 font-mono text-xs break-all">{{ generateHomeIpCmd() }}</div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button @click="saveHomeIpConfig" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black hover:bg-emerald-700 shadow-md">保存全局家宽配置</button>
+                        <button @click="loadHomeIp" class="bg-white text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black hover:bg-slate-50 border border-white shadow-sm">刷新状态</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div v-for="node in homeIpNodes" :key="node.ip" class="bg-white/70 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 p-6">
+                        <div class="flex items-start justify-between gap-3 mb-5">
+                            <div>
+                                <h3 class="text-xl font-black text-slate-800">{{ getVpsName(node.ip) }}</h3>
+                                <p class="text-xs font-mono text-slate-400">{{ node.ip }} · {{ Math.round((Date.now() - node.last_seen) / 1000) }} 秒前</p>
+                            </div>
+                            <button @click="switchHomeIp(node.ip)" class="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-black hover:bg-emerald-100 border border-emerald-100">切换出口</button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div v-for="detail in parseHomeIpDetails(node.details)" :key="detail.tunnel || detail.port" class="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
+                                <div class="flex items-center justify-between gap-2 mb-2"><span class="font-black text-slate-700">{{ detail.tunnel || 'tunnel' }}</span><span class="text-[10px] px-2 py-1 rounded-full font-black" :class="detail.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">{{ detail.active ? 'ACTIVE' : 'STANDBY' }}</span></div>
+                                <div class="text-xs text-slate-500 space-y-1 font-medium">
+                                    <div>国家：{{ detail.country || '-' }} · 端口：{{ detail.port || '-' }}</div>
+                                    <div>节点 IP：{{ detail.node_ip || '-' }}</div>
+                                    <div>出口 IP：{{ detail.exit_ip || '-' }}</div>
+                                    <div>在线：{{ Math.floor((detail.connected_time || 0) / 60) }} 分钟</div>
+                                </div>
+                            </div>
+                        </div>
+                        <pre v-if="node.logs" class="mt-4 max-h-36 overflow-auto bg-slate-900 text-slate-300 text-[11px] p-3 rounded-xl whitespace-pre-wrap">{{ node.logs }}</pre>
+                    </div>
+                    <div v-if="homeIpNodes.length === 0" class="xl:col-span-2 bg-white/60 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 p-10 text-center text-slate-400 font-bold">暂无家宽节点上报。先复制安装命令到目标 VPS 执行。</div>
                 </div>
             </div>
             <div v-if="activeTab === 'settings'" class="myvps-settings-page space-y-6 max-w-full overflow-hidden">
@@ -835,13 +894,18 @@
 
                 const adminProbeServers = ref([]);
                 const probeEditModalOpen = ref(false); const editingProbeNode = ref({});
+                const homeIpNodes = ref([]);
+                const homeIpProxyReady = ref(false);
+                const homeIpTarget = ref('');
+                const homeIpCountry = ref('JP');
+                const homeIpPort = ref(7920);
                 
                 const qrModalOpen = ref(false);
                 const qrCodeImage = ref('');
                 
                 const showWelcomePopup = ref(false);
 
-                watch(activeTab, (val) => { localStorage.setItem('monitor_preferred_tab', val); if (val === 'settings' && isLoggedIn.value && role.value === 'admin') loadAdminProbeServers(); if (val === 'probe') { updateCustomStyles(); updateCustomScript(probeSys.custom_script); } else { document.body.className = ''; document.getElementById('myvps-custom-styles')?.remove(); document.getElementById('myvps-custom-head')?.remove(); updateCustomScript(''); } });
+                watch(activeTab, (val) => { localStorage.setItem('monitor_preferred_tab', val); if (val === 'settings' && isLoggedIn.value && role.value === 'admin') loadAdminProbeServers(); if (val === 'homeip' && isLoggedIn.value && role.value === 'admin') loadHomeIp(); if (val === 'probe') { updateCustomStyles(); updateCustomScript(probeSys.custom_script); } else { document.body.className = ''; document.getElementById('myvps-custom-styles')?.remove(); document.getElementById('myvps-custom-head')?.remove(); updateCustomScript(''); } });
                 watch(probeView, (val) => localStorage.setItem('monitor_preferred_view', val));
 
                 const hasCustomCssFlag = computed(() => {
@@ -979,6 +1043,8 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const globalTraffic = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_rx || 0) + parseFloat(s.net_tx || 0)), 0));
                 const globalSpeedIn = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_in_speed) || 0), 0));
                 const globalSpeedOut = computed(() => servers.value.reduce((sum, s) => sum + (parseFloat(s.net_out_speed) || 0), 0));
+                const parseHomeIpDetails = (raw) => { try { const value = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw; return Array.isArray(value) ? value : []; } catch(e) { return []; } };
+                const homeIpActiveCount = computed(() => homeIpNodes.value.reduce((sum, node) => sum + parseHomeIpDetails(node.details).filter(item => item.active).length, 0));
 
                 const filteredProbeServers = computed(() => {
                     if (currentFilter.value === 'all') return publicProbeServers.value;
@@ -1278,6 +1344,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     
                     
                     if (activeTab.value === 'settings' && role.value === 'admin') loadAdminProbeServers();
+                    if (activeTab.value === 'homeip' && role.value === 'admin') loadHomeIp();
                     } catch(e) {} finally { isFetchingMyVps = false; }
                 };
 
@@ -1328,6 +1395,36 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const openProbeEditModal = (s) => { editingProbeNode.value = JSON.parse(JSON.stringify(s)); if(!editingProbeNode.value.is_hidden) editingProbeNode.value.is_hidden = 'false'; if(!editingProbeNode.value.reset_day) editingProbeNode.value.reset_day = '1'; probeEditModalOpen.value = true; };
                 const saveProbeEdit = async () => { await fetchApi('/api/probe/admin/server', { method: 'PUT', body: JSON.stringify(editingProbeNode.value) }); probeEditModalOpen.value = false; refreshData(); fetchProbeData(); };
                 const deleteProbeNode = async (id) => { if (!confirm("⚠️ 确定要彻底删除该探针记录吗？如果机器还在运行 Agent，之后会自动恢复上报。请确保先在「服务器监控」中移除此机器。")) return; await fetchApi(`/api/probe/admin/server?id=${id}`, { method: 'DELETE' }); refreshData(); fetchProbeData(); };
+                const generateHomeIpCmd = () => {
+                    const ip = homeIpTarget.value || servers.value[0]?.ip || '';
+                    const token = servers.value.find(server => server.ip === ip)?.agent_token || '';
+                    if (!ip) return '请先选择一台已接入的服务器';
+                    if (!token) return '请先刷新页面以签发该服务器的 Agent Token';
+                    const scriptUrl = `${currentDomain}/api/agent_update?ip=${encodeURIComponent(ip)}&component=proxy-installer`;
+                    return `bash <(curl -fsSL -H "Authorization: ${token}" "${scriptUrl}") --domain "${currentDomain}" --controller "${currentDomain}" --ip "${ip}" --token "${token}"`;
+                };
+                const loadHomeIp = async () => {
+                    try {
+                        const res = await fetchApi('/api/homeip/summary');
+                        const data = await res.json();
+                        homeIpNodes.value = data.nodes || [];
+                        homeIpProxyReady.value = data.proxy_ready === true;
+                    } catch(e) {}
+                };
+                const saveHomeIpConfig = async () => {
+                    const country = String(homeIpCountry.value || 'JP').trim().toUpperCase().slice(0, 2);
+                    const port = Math.min(65535, Math.max(1, Number(homeIpPort.value) || 7920));
+                    await fetchApi('/api/homeip/config', { method: 'POST', body: JSON.stringify({ country, "0": country, port, enabled: true }) });
+                    homeIpCountry.value = country;
+                    homeIpPort.value = port;
+                    alert('✅ 家宽全局配置已保存。已部署节点会在下一次拉取配置时生效。');
+                    loadHomeIp();
+                };
+                const switchHomeIp = async (ip) => {
+                    await fetchApi('/api/homeip/switch', { method: 'POST', body: JSON.stringify({ ip }) });
+                    alert('✅ 已下发切换出口指令，等待家宽 Agent 执行。');
+                    loadHomeIp();
+                };
                 
                 const loadThirdPartySubscriptions = async () => {};
                 const addThirdPartySubscription = async () => {};
@@ -1476,6 +1573,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, generateUUIDForNewUser,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, serverEditModalOpen, editingServer, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain, 
+                    homeIpNodes, homeIpProxyReady, homeIpTarget, homeIpCountry, homeIpPort, homeIpActiveCount, parseHomeIpDetails, generateHomeIpCmd, loadHomeIp, saveHomeIpConfig, switchHomeIp,
                     showWelcomePopup, closePopup,
                     availableThemes, pingNodes, pullGithubNodes, hasCustomCssFlag,
                 };
