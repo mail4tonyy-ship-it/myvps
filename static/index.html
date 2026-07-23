@@ -122,6 +122,7 @@
           <option value="theme5">霓虹</option>
         </select>
         <button class="btn" @click="openAdmin">{{ isLoggedIn ? '管理' : '登录' }}</button>
+        <button v-if="isLoggedIn" class="btn" @click="logout">退出</button>
       </div>
       <button v-else class="btn" @click="closeDetail">返回大盘</button>
     </header>
@@ -203,7 +204,10 @@
 
   <div v-if="adminOpen" class="modal" @click.self="adminOpen=false">
     <div class="dialog">
-      <h2>{{ isLoggedIn ? '探针管理' : '管理员登录' }}</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <h2 style="margin:0">{{ isLoggedIn ? '探针管理' : '管理员登录' }}</h2>
+        <button v-if="isLoggedIn" class="btn" @click="logout">退出登录</button>
+      </div>
       <template v-if="!isLoggedIn">
         <div class="field"><label>用户名</label><input v-model="login.username"></div>
         <div class="field"><label>密码</label><input v-model="login.password" type="password" @keyup.enter="doLogin"></div>
@@ -265,6 +269,7 @@ createApp({
     connectWs(){if(this.ws||location.protocol!=="https:")return;this.wsState="实时连接中";this.ws=new WebSocket(`${location.origin.replace(/^http/,"ws")}/public/ws`);this.ws.onopen=()=>this.wsState="实时已连接";this.ws.onclose=()=>{this.ws=null;this.wsState="实时已断开";setTimeout(()=>this.connectWs(),5000)};this.ws.onmessage=e=>{if(e.data==="pong")return;try{const msg=JSON.parse(e.data);if(msg.type==="snapshot"){this.settings=msg.data.settings||this.settings;this.servers=msg.data.servers||this.servers;if(this.view==="map")this.$nextTick(this.renderMap)}}catch{}};setInterval(()=>{try{this.ws&&this.ws.send("ping")}catch{}},25000)},
     async checkMe(){if(!this.token)return;try{await this.api("/api/auth/me");await this.loadAdmin()}catch{this.token="";localStorage.removeItem("probeToken")}},
     async doLogin(){try{const d=await this.api("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(this.login)});this.token=d.token;localStorage.probeToken=d.token;this.notice("已登录");await this.loadAdmin()}catch(e){this.notice(e.message)}},
+    logout(){this.token="";delete localStorage.probeToken;this.adminServers=[];this.lastCommand="";this.adminOpen=false;this.notice("已退出登录")},
     async loadAdmin(){if(!this.token)return;this.adminServers=await this.api("/api/servers")},
     openAdmin(){this.adminOpen=true;this.loadAdmin()},
     async addServer(){try{const d=await this.api("/api/servers",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(this.newServer)});this.lastCommand=d.install_command;this.newServer={ip:"",name:"",server_group:this.newServer.server_group||"默认分组"};await this.load();await this.loadAdmin();this.notice("已添加探针")}catch(e){this.notice(e.message)}},
